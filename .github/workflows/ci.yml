@@ -1,0 +1,39 @@
+name: verify
+
+# Cross-platform verification. This is the stand-in for manually testing
+# Windows: every push builds and tests the example plugin on Windows, macOS and
+# Linux, so a regression on any OS turns the run red.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: build + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # First level only. We need the SDK and firmware docs/tools, NOT the
+          # firmware's heavy nested submodules (WAMR, libtropic, ...), one of
+          # which has a path too long for a Windows checkout.
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bootstrap the toolchain (host-native, same on every OS)
+        run: python scripts/setup.py
+
+      - name: Build the example plugin
+        run: python tools/badge.py build starter
+
+      - name: Run the example plugin's host tests
+        run: python tools/badge.py test starter

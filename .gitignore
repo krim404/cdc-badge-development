@@ -1,0 +1,59 @@
+# --- Rust / WebAssembly build output ---
+/target
+**/target
+*.rs.bk
+*.wasm
+*.aot
+
+# --- Build artifacts ---
+/dist
+/build
+
+# --- Python (host-native bootstrap + tools) ---
+/.venv
+**/.venv
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Toolchain helpers fetched by setup.py (binaryen/wasm-opt etc.) ---
+/.tools
+
+# --- Secrets and local environment (never commit these) ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+secrets.*
+
+# --- Logs and temporary files ---
+*.log
+*.tmp
+*.bak
+*.orig
+
+# --- Node (only if a plugin/tool pulls it in) ---
+node_modules/
+
+# --- Editor / IDE noise (the shared .vscode config is committed on purpose) ---
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.history/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Ship the agent assets ---
+# This repo intentionally tracks .claude/ (Claude Code skills + Spec Kit
+# commands). A common global ignore (**/.claude/) would otherwise drop it, so
+# re-include it here explicitly.
+!.claude/
+!.claude/**

@@ -1,0 +1,6 @@
+{
+  "files.eol": "\n",
+  "rust-analyzer.linkedProjects": [
+    "plugins/starter/Cargo.toml"
+  ]
+}

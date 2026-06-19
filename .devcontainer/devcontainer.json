@@ -1,0 +1,14 @@
+{
+  "name": "CDC Badge Development",
+  "build": { "dockerfile": "../Dockerfile" },
+  "postCreateCommand": "git submodule update --init vendor/cdc-badge-os vendor/cdc-badge-plugins",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "ms-vscode.vscode-serial-monitor"
+      ]
+    }
+  }
+}

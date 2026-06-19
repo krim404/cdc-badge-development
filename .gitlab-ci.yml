@@ -1,0 +1,20 @@
+stages:
+  - push
+
+variables:
+  HARBOR_HOST: registry.krim.dev
+  IMAGE_NAME: $HARBOR_HOST/library/$CI_PROJECT_NAME
+
+# Builds the dev-container image and pushes it to registry.krim.dev. Runs only
+# on the default branch and only when the Harbor credentials are configured.
+push:
+  stage: push
+  image: docker:27
+  script:
+    - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" "$HARBOR_HOST"
+    - docker buildx build
+        -t "$IMAGE_NAME:$CI_COMMIT_TAG"
+        -t "$IMAGE_NAME:latest"
+        --push .
+  rules:
+    - if: '$CI_COMMIT_TAG && $HARBOR_PASSWORD'

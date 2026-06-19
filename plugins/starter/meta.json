@@ -1,0 +1,20 @@
+{
+  "id": "starter",
+  "version": "0.1.0",
+  "author": "your_name",
+  "icon": "info",
+  "host_api_level_min": "0.5",
+  "linear_memory_kb": 64,
+  "i18n": {
+    "default_language": "en",
+    "meta": {
+      "name":        { "en": "Starter",                 "de": "Starter" },
+      "description": { "en": "A commented hello-world.", "de": "Ein kommentiertes Hallo-Welt." }
+    },
+    "strings": {}
+  },
+  "capabilities": {
+    "ui_exclusive": false
+  },
+  "prerequisites": {}
+}

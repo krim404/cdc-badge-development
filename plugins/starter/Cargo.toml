@@ -1,0 +1,24 @@
+[package]
+name = "starter"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# cdylib is what the badge loads; rlib lets host tooling and `cargo test`
+# build the crate on your computer.
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+# The SDK only builds for the badge (wasm). Depending on it ONLY for the wasm
+# target keeps host-side `cargo test` fast and lets the pure logic be tested
+# off-device. The path points at the pinned SDK in the vendored submodule.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cdc-badge-plugin = { path = "../../vendor/cdc-badge-plugins/sdk/cdc-badge-plugin", features = ["panic_handler"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

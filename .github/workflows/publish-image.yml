@@ -1,0 +1,41 @@
+name: publish-image
+
+# Builds the dev-container image and pushes it to Docker Hub. It runs only when
+# the Docker Hub credentials are configured as repository secrets, so forks and
+# local use are unaffected.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  docker-hub:
+    runs-on: ubuntu-latest
+    env:
+      # Secrets are read into env (never interpolated into shell commands).
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            wmchris/cdc-badge-development:latest
+            wmchris/cdc-badge-development:${{ github.ref_name }}
+
+      - name: No credentials configured
+        if: ${{ env.DOCKERHUB_TOKEN == '' }}
+        run: echo "Docker Hub credentials not set; skipping publish (this is fine)."

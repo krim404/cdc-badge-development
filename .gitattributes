@@ -1,0 +1,6 @@
+# Keep scripts and text LF on every OS so the same bootstrap works on
+# macOS, Linux and Windows checkouts (Windows is a first-class target).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.wasm binary

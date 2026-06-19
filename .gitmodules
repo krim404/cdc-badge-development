@@ -1,0 +1,6 @@
+[submodule "vendor/cdc-badge-os"]
+	path = vendor/cdc-badge-os
+	url = https://github.com/krim404/cdc-badge-os.git
+[submodule "vendor/cdc-badge-plugins"]
+	path = vendor/cdc-badge-plugins
+	url = https://github.com/krim404/cdc-badge-plugins.git

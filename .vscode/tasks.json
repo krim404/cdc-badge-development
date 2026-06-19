@@ -1,0 +1,60 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup",
+      "detail": "One-time: install the toolchain (rust+wasm, wasm-opt, venv, submodules)",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": ["scripts/setup.py"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build plugin",
+      "detail": "Compile a plugin to an optimised .wasm",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "windows": { "command": "${workspaceFolder}/.venv/Scripts/python.exe" },
+      "args": ["tools/badge.py", "build", "${input:pluginName}"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test plugin",
+      "detail": "Run a plugin's host-side unit tests",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "windows": { "command": "${workspaceFolder}/.venv/Scripts/python.exe" },
+      "args": ["tools/badge.py", "test", "${input:pluginName}"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Flash plugin",
+      "detail": "Build + upload to a connected badge, start it, and stream logs",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "windows": { "command": "${workspaceFolder}/.venv/Scripts/python.exe" },
+      "args": ["tools/badge.py", "flash", "${input:pluginName}", "--start", "--monitor"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Monitor serial",
+      "detail": "Stream the badge's serial log",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "windows": { "command": "${workspaceFolder}/.venv/Scripts/python.exe" },
+      "args": ["tools/badge.py", "monitor"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pluginName",
+      "type": "promptString",
+      "description": "Plugin name (folder under plugins/)",
+      "default": "starter"
+    }
+  ]
+}
