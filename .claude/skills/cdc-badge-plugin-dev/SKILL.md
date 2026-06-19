@@ -30,6 +30,39 @@ under `vendor/`.
   `vendor/` versions, and when you hit a genuine platform bug report it upstream
   rather than working around it by patching `vendor/`.
 
+## Hardware & limits (check feasibility BEFORE building)
+
+The badge is constrained hardware. Before proposing or implementing an idea,
+sanity-check it against these limits and tell the student plainly if it is
+impractical - propose a version that fits instead:
+
+- **Display is a 2.9" E-Paper panel (Gdey029T94, 296×128).** A partial refresh
+  takes ~100-300 ms and the panel ghosts. No animation, no fast or continuous
+  redraws: redraw only when a shown value actually changes, at most ~1×/second,
+  partial refresh by default, full refresh sparingly (see `reference/pitfalls.md`).
+- **`plugin_on_tick` fires every ~50 ms (~20×/second)** - it is NOT a redraw
+  signal. Never draw every tick; throttle to real changes.
+- **WASM on an ESP32-S3 is slow.** Keep compute light - no heavy loops, big
+  parsing, or large per-frame data.
+- **Memory:** ~8 MB octal PSRAM is the default pool, but internal SRAM (~512 KB)
+  is the real bottleneck. A plugin declares its WASM `linear_memory_kb`
+  (16-1024 KB, i.e. ≤1 MB) - keep buffers small. All plugins and any files they
+  store share a single **2 MB** vFAT partition; flash is 16 MB total.
+- **Network is modest/slow.** A small HTTP fetch occasionally is fine; large or
+  frequent downloads are not, and WiFi must be brought up first (may be absent).
+- **Input is a 12-key keypad** (no touch) with **T9 text entry** (`ui::push_t9_input`);
+  BLE + USB are available.
+- **It is a crypto badge: a TROPIC01 secure element** holds secrets/ECC keys
+  on-chip. Plugins reach it via the `rmem` (secure memory) and `ecc` (named key
+  slots) capabilities when a plugin genuinely needs a secret kept off plain flash
+  (the OS already provides a password vault and TOTP, so don't rebuild those).
+
+Feasible: name tags, counters, dice/random pickers, small status views,
+fetch-once-then-render, periodic (per-minute) timers, badge-to-badge messages.
+Not feasible: animation, high frame rates, live graphs, heavy computation, large
+media. **Don't rebuild what the OS already ships** (TOTP, password vault,
+lock-screen clock, vCard contact exchange) - propose something new instead.
+
 ## Golden rules (always)
 
 1. **Work within the rails; `host_api.h` is the single source of truth.** Verify
@@ -64,21 +97,34 @@ python tools/badge.py list|start <id>|stop|delete <id>       # manage plugins on
 No host USB (e.g. a container)? Use the WebSerial webflasher in
 `vendor/cdc-badge-plugins/webflasher`. If the badge needs a PIN, add `--pin <pin>`.
 
-## Debugging
+## Debugging & verifying
 
 - Read the log with `badge monitor`. Interpret rejections: capability not declared
   (`HOST_ERR_NO_CAPABILITY`), manifest invalid, `host_api_level_min` higher than
   the firmware, plugin too large, or auth needed.
 - Only one program can hold the serial port - close the monitor before flashing.
+- Full manual playbook (opening the serial port by hand on macOS/Linux/Windows or
+  via the VS Code Serial Monitor, the `HOST_ERR_*` table, panics, bisecting):
+  **`reference/debugging.md`**.
+- **"Green" is not "renders correctly".** Passing host tests and a clean log do
+  NOT prove the UI is right - layout and refresh bugs never appear in the log. For
+  any canvas/UI plugin, **verify visually on the device**: text fits 296×128,
+  nothing overlaps or overflows, the screen is not refreshing constantly, and it
+  is readable. (Canvas layout traps are in `reference/pitfalls.md`.)
 
 ## Where the detail lives (read on demand, don't re-state here)
 
+- **`reference/codebook.md`** - short, verified patterns from the real demos
+  (toast, menu, a proper canvas view, keypad, NVS, badge-to-badge). Copy these.
 - **`reference/pitfalls.md`** - the badge-specific gotchas and the AI-agent mistakes
   to guard against. Read it before writing code.
 - **`reference/host-api-map.md`** - which SDK module and capability each area maps to;
   canonical signatures stay in `host_api.h`.
 - **`reference/capabilities-and-lifecycle.md`** - capability gating, behavioral caps,
   hardware shortcuts, prerequisites, lifecycle hooks, and the `Result`/`Error` model.
+- **`reference/debugging.md`** - manual debugging playbook: open the serial log
+  (VS Code Serial Monitor, or `screen`/PuTTY per OS), error-code table, panics,
+  bisecting, and a symptoms→causes table.
 - Vendored ground truth: `knowledge/index.md`, the SDK source under
   `vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/`, the examples, the manifest
   schema (`vendor/cdc-badge-plugins/docs/manifest_schema.md`), and the firmware dev

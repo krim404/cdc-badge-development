@@ -65,7 +65,7 @@ Optional exports:
 | `plugin_on_action(action_id, idx, user_data)` | a UI view callback fires (bind to `user_data`) |
 | `plugin_on_button(button_code)` | a keypad press while no host view is foreground |
 | `plugin_on_event(event_type, value)` | a subscribed EventBus event arrives |
-| `plugin_on_tick(uptime_ms)` | ~once per second |
+| `plugin_on_tick(uptime_ms)` | **~every 50 ms (~20×/second)** - NOT a redraw signal; throttle UI updates to real changes (see e-paper pitfalls) |
 | `plugin_on_cmd(len)` | host forwarded a command string; pull with `cmd::consume` |
 | `plugin_on_prerequisite_failed(prereq_id, error_code)` | a `callback` prerequisite failed |
 

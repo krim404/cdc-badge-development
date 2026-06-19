@@ -44,6 +44,26 @@ The mistakes that cost real time on this platform. Apply these proactively.
 - **`host_api_level_min`** must be ≤ the firmware's level, or the badge refuses to
   load the plugin. `linear_memory_kb` is `[16, 4096]`.
 
+## Display: E-Paper & canvas layout
+
+- **The screen is E-Paper (2.9" Gdey029T94, 296×128), not an LCD.** A partial
+  refresh takes ~100-300 ms and the panel ghosts. **Redraw only when a shown value
+  actually changes**, at most ~1×/second; **never redraw on every `plugin_on_tick`**
+  (it fires ~every 50 ms). Use partial refresh (`canvas::commit(false)`) for normal
+  updates and a full refresh (`canvas::commit(true)`) sparingly to clear ghosting. A
+  per-tick redraw flickers and wears the panel - this is the #1 "compiles but looks
+  broken" bug.
+- **`canvas::pick_font_that_fits` checks WIDTH only, not height.** On the 128px-tall
+  panel a width-fitting font can still overflow vertically. Cap the font size and
+  keep your own y-offsets inside the body height (`canvas::body_size()` returns both).
+- **Coordinates are relative to the canvas body, and a title adds a header.** A
+  `canvas::push(title, ...)` with a non-empty title draws a header + divider and
+  shrinks the body; some draw calls are baseline-relative depending on the font. Do
+  not guess offsets - copy the working layout from `examples/sci_calc` (status at
+  y=0, divider, big value at ~y=26, list below) shown in `reference/codebook.md`.
+- **Verify canvas plugins visually on the device.** Layout/refresh bugs never show
+  in the serial log - host tests passing and a clean log do NOT mean it renders right.
+
 ## UI & lifecycle
 
 - **Canvas back-key footgun**: a canvas key callback consumes **all** key events.

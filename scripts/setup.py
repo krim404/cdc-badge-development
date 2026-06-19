@@ -23,6 +23,7 @@ dropped into the ignored .tools/ folder. Nothing here needs PowerShell.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -88,6 +89,154 @@ def ensure_rust() -> None:
     # which rustup honours automatically inside a plugin directory. We only have
     # to make sure the WebAssembly target is installed.
     run(["rustup", "target", "add", "wasm32-unknown-unknown"])
+    register_toolchain()
+
+
+def is_real_cargo(path: str) -> bool:
+    """True only if `path --version` reports cargo itself.
+
+    Some installs leave a broken `cargo` on PATH that is really a rustup proxy
+    (e.g. Homebrew's `~/.cargo/bin/cargo` execs `rustup "$@"`, so `cargo --version`
+    prints `rustup x.y.z`). Such a binary breaks cargo callers and rust-analyzer.
+    """
+    try:
+        out = subprocess.run([path, "--version"], capture_output=True,
+                             text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and out.stdout.strip().lower().startswith("cargo")
+
+
+def discover_cargo() -> str | None:
+    """Locate a cargo that actually works, ignoring broken proxy wrappers.
+
+    Order: ask rustup for the real toolchain binary first (it is never a proxy
+    wrapper), then accept a PATH `cargo` only if it verifies as real cargo.
+    """
+    if have("rustup"):
+        try:
+            out = subprocess.run(["rustup", "which", "cargo"],
+                                 capture_output=True, text=True, check=True)
+            p = out.stdout.strip()
+            if p and Path(p).exists() and is_real_cargo(p):
+                return p
+        except (OSError, subprocess.SubprocessError):
+            pass
+    p = shutil.which("cargo")
+    if p and is_real_cargo(p):
+        return p
+    return None
+
+
+def register_toolchain() -> None:
+    """Make a WORKING cargo/rustc discoverable for every consumer - this script,
+    the badge CLI, rust-analyzer and the shell - on macOS, Linux and Windows.
+
+    We do not rely on `~/.cargo/bin`: on some machines that directory holds a
+    broken proxy wrapper (notably Homebrew's `rustup`, whose `cargo` shim execs
+    `rustup "$@"` and so behaves as rustup, not cargo). Instead we discover the
+    real toolchain bin dir (the one `rustup which cargo` points into) and put
+    THAT first - so the real binaries win over any broken shim. No hardcoded paths.
+    """
+    step("Registering the Rust toolchain (CLI, shell + rust-analyzer)")
+    cargo = discover_cargo()
+    if not cargo:
+        print("   note: could not verify a working cargo. Re-run after installing "
+              "Rust from https://rustup.rs, then reload VS Code.")
+        return
+    tc_bin = str(Path(cargo).parent)
+    print(f"   toolchain: {tc_bin}")
+
+    # Real toolchain bin first for the rest of this run.
+    os.environ["PATH"] = tc_bin + os.pathsep + os.environ.get("PATH", "")
+
+    # Persist for future shells and configure the IDE explicitly (so it works no
+    # matter how VS Code was launched).
+    if os.name == "nt":
+        _register_path_windows(tc_bin)
+    else:
+        _register_path_unix(tc_bin)
+    _write_vscode_rust_env(tc_bin)
+
+    if is_real_cargo(shutil.which("cargo") or ""):
+        print("   cargo + rustc resolve to the real toolchain")
+    else:
+        print("   open a NEW terminal so the PATH change applies (or just use the "
+              "VS Code tasks / the badge CLI, which find it automatically)")
+
+
+# A single marker so the rc edit is idempotent and removable.
+_RC_MARKER = "# cdc-badge-development: real Rust toolchain on PATH"
+
+
+def _register_path_unix(tc_bin: str) -> None:
+    """Prepend the real toolchain bin to the common shell rc files (idempotent).
+
+    Prepending means it shadows any broken `~/.cargo/bin` shim a previous install
+    may have put on PATH.
+    """
+    block = f'{_RC_MARKER}\nexport PATH="{tc_bin}:$PATH"\n'
+    for rc in (".profile", ".bashrc", ".zshrc"):
+        rc_path = Path.home() / rc
+        try:
+            existing = rc_path.read_text() if rc_path.exists() else ""
+            if _RC_MARKER in existing:
+                continue
+            with rc_path.open("a") as f:
+                f.write(f"\n{block}")
+        except OSError:
+            pass
+
+
+def _register_path_windows(tc_bin: str) -> None:
+    """Prepend the real toolchain bin to the *user* PATH (no duplicates)."""
+    try:
+        q = subprocess.run(["reg", "query", "HKCU\\Environment", "/v", "Path"],
+                           capture_output=True, text=True)
+        current = ""
+        for line in q.stdout.splitlines():
+            if "Path" in line and "REG_" in line:
+                current = line.split("REG_", 1)[1].split(None, 1)[-1].strip()
+        if tc_bin.lower() not in current.lower():
+            new = f"{tc_bin};{current}" if current else tc_bin
+            subprocess.run(["setx", "PATH", new], check=False)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+
+
+def _write_vscode_rust_env(tc_bin: str) -> None:
+    """Point rust-analyzer at the real toolchain via .vscode/settings.json.
+
+    Setting the server's PATH explicitly means the IDE uses the real cargo/rustc
+    regardless of how VS Code was launched (Dock/Start menu vs. a shell), and
+    regardless of any broken `~/.cargo/bin` shim. The file is machine-specific
+    and git-ignored; this regenerates it on every setup. linkedProjects lists
+    every plugin crate present so rust-analyzer indexes them all.
+    """
+    vscode = ROOT / ".vscode"
+    vscode.mkdir(exist_ok=True)
+    settings_path = vscode / "settings.json"
+    settings: dict = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except ValueError:
+            settings = {}
+    settings["files.eol"] = "\n"
+    projects = sorted(p.relative_to(ROOT).as_posix()
+                      for p in (ROOT / "plugins").glob("*/Cargo.toml"))
+    if projects:
+        settings["rust-analyzer.linkedProjects"] = projects
+    # Toolchain bin first, then the inherited PATH with duplicates/empties removed.
+    seen = {tc_bin}
+    entries = [tc_bin]
+    for part in os.environ.get("PATH", "").split(os.pathsep):
+        if part and part not in seen:
+            seen.add(part)
+            entries.append(part)
+    settings["rust-analyzer.server.extraEnv"] = {"PATH": os.pathsep.join(entries)}
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    print(f"   wrote {settings_path.relative_to(ROOT)} (rust-analyzer -> real toolchain)")
 
 
 # --------------------------------------------------------------------------- #

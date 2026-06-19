@@ -36,15 +36,19 @@ In short:
 
 ### Classical (no AI)
 
+Run the **Setup** task first (see [Start here](#-start-here)). Then - on
+macOS/Linux type `python3`, on Windows `python`:
+
 ```sh
-python tools/badge.py new   hello        # create a plugin
-python tools/badge.py test  hello        # run host-side tests (write tests first!)
-python tools/badge.py build hello        # compile to .wasm
-python tools/badge.py flash hello --start --monitor   # upload, run, watch logs
+python3 tools/badge.py new   hello        # create a plugin in plugins/hello/
+python3 tools/badge.py test  hello        # run host-side tests (write tests first!)
+python3 tools/badge.py build hello        # compile to .wasm
+python3 tools/badge.py flash hello --start --monitor   # upload, run, watch (Ctrl-C to stop)
 ```
 
-If your computer can't reach the badge over USB, use the browser installer
-(WebSerial) at <https://krim404.github.io/cdc-badge-plugins/> instead.
+Your code lives in **`plugins/hello/src/lib.rs`**. If your computer can't reach
+the badge over USB, use the browser installer (WebSerial) at
+<https://krim404.github.io/cdc-badge-plugins/> instead.
 
 ### Vibe / spec-driven (AI)
 
@@ -54,6 +58,18 @@ the spec-driven-development commands (`/speckit-specify`, `/speckit-plan`, …) 
 active out of the box - no setup. The AI follows the standards in
 [`code-quality.md`](./code-quality.md), writes tests first, and comments code for
 learners.
+
+## The badge & its limits
+
+The badge is an **ESP32-S3** with a **2.9" e-paper screen (296×128)**, a **12-key
+keypad** (T9 text entry), **BLE + USB**, a **TROPIC01 secure element** (it's a
+crypto badge), ~8 MB PSRAM but tight internal RAM, 16 MB flash, and a **2 MB**
+storage area shared by all plugins. That shapes what is fun to build: e-paper redraws are slow (~0.1-0.3 s) so avoid animation and redraw only
+on change; plugins run as WebAssembly on a small chip so keep the work light; the
+network is modest. Good fits: a name tag, counters, dice, a small status view, a
+single fetch, **badge-to-badge messages** - things the badge does not already do
+(it ships TOTP, a password vault, a clock and vCard exchange). The skill knows
+these limits and will tell you if an idea won't fit - see `EASY.md` → "Ideas to try".
 
 ## What's inside
 

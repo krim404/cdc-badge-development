@@ -45,7 +45,11 @@ secrets.*
 # --- Node (only if a plugin/tool pulls it in) ---
 node_modules/
 
-# --- Editor / IDE noise (the shared .vscode config is committed on purpose) ---
+# --- Editor / IDE noise ---
+# .vscode/extensions.json and tasks.json are committed on purpose. settings.json
+# is generated per-machine by scripts/setup.py (it bakes in the absolute path to
+# the local Rust toolchain for rust-analyzer), so it must not be committed.
+/.vscode/settings.json
 .idea/
 *.iml
 *.swp

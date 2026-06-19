@@ -20,6 +20,8 @@ Design notes for the curious student:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shutil
 import subprocess
 import sys
@@ -53,21 +55,48 @@ def find(tool: str, *fallbacks: Path) -> str:
     fail(f"could not find {tool!r}. Run: python scripts/setup.py")
 
 
+def _is_real_cargo(path: str) -> bool:
+    """True only if `path --version` reports cargo itself, not a proxy wrapper.
+
+    Some installs leave a `cargo` on PATH that is really a rustup proxy (e.g.
+    Homebrew's `~/.cargo/bin/cargo` execs `rustup "$@"`, so it prints `rustup ...`
+    and breaks every cargo call). Such a binary must be ignored.
+    """
+    try:
+        out = subprocess.run([path, "--version"], capture_output=True,
+                             text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and out.stdout.strip().lower().startswith("cargo")
+
+
 def cargo() -> str:
     exe = "cargo.exe" if sys.platform == "win32" else "cargo"
+    # Ask rustup first: it returns the real toolchain binary, never a proxy shim.
+    if shutil.which("rustup"):
+        try:
+            out = subprocess.run(["rustup", "which", "cargo"],
+                                 capture_output=True, text=True, check=True)
+            p = out.stdout.strip()
+            if p and Path(p).exists() and _is_real_cargo(p):
+                return p
+        except (OSError, subprocess.SubprocessError):
+            pass
+    # Otherwise accept a PATH cargo, but only if it verifies as real cargo.
     on_path = shutil.which("cargo")
-    if on_path:
+    if on_path and _is_real_cargo(on_path):
         return on_path
-    # A rustup-managed toolchain may not expose a cargo shim on PATH; ask rustup.
-    try:
-        out = subprocess.run(["rustup", "which", "cargo"],
-                             capture_output=True, text=True, check=True)
-        p = out.stdout.strip()
-        if p and Path(p).exists():
-            return p
-    except Exception:  # noqa: BLE001 - fall through to the explicit fallback
-        pass
     return find("cargo", Path.home() / ".cargo" / "bin" / exe)
+
+
+def rust_env() -> dict:
+    """Environment for invoking cargo: put the toolchain's own bin dir on PATH so
+    cargo can find its sibling rustc even when the ~/.cargo/bin shims are not set
+    up (e.g. a Homebrew rustup). Works on every OS, no hardcoded paths."""
+    env = os.environ.copy()
+    cargo_dir = str(Path(cargo()).parent)
+    env["PATH"] = cargo_dir + os.pathsep + env.get("PATH", "")
+    return env
 
 
 def wasm_opt() -> str:
@@ -106,13 +135,26 @@ def cmd_new(a: argparse.Namespace) -> None:
         fail(f"plugins/{a.name} already exists")
     if not STARTER.exists():
         fail("plugins/starter is missing (did the checkout complete?)")
-    shutil.copytree(STARTER, dst)
-    # Rename the crate and the manifest id from 'starter' to the chosen name.
+    # Copy the starter WITHOUT build artefacts, so the new plugin starts clean.
+    shutil.copytree(STARTER, dst,
+                    ignore=shutil.ignore_patterns("target", "Cargo.lock", "*.wasm"))
+    # Rename the crate - targeted, not a blind replace that could hit substrings.
     cargo_toml = dst / "Cargo.toml"
-    cargo_toml.write_text(cargo_toml.read_text().replace("starter", a.name))
-    meta = dst / "meta.json"
-    meta.write_text(meta.read_text().replace("starter", a.name))
-    print(f"created plugins/{a.name} (build it with: badge build {a.name})")
+    cargo_toml.write_text(cargo_toml.read_text().replace('name = "starter"', f'name = "{a.name}"'))
+    lib_rs = dst / "src" / "lib.rs"
+    if lib_rs.exists():
+        lib_rs.write_text(lib_rs.read_text().replace('"starter"', f'"{a.name}"'))
+    # Update the manifest id and display name as structured JSON (keeps "Starter"
+    # from leaking into the on-device name).
+    meta_path = dst / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta["id"] = a.name
+    names = meta.get("i18n", {}).get("meta", {}).get("name")
+    if isinstance(names, dict):
+        for lang in names:
+            names[lang] = a.name
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+    print(f"created plugins/{a.name} - edit plugins/{a.name}/src/lib.rs, then: badge build {a.name}")
 
 
 def cmd_build(a: argparse.Namespace) -> Path:
@@ -120,7 +162,7 @@ def cmd_build(a: argparse.Namespace) -> Path:
     run = [cargo(), "build", "--release", "--target", WASM_TARGET,
            "--manifest-path", str(manifest(a.name))]
     print("   $", " ".join(run))
-    subprocess.run(run, check=True)
+    subprocess.run(run, check=True, env=rust_env())
     # A standalone plugin (no cargo workspace) puts its build output under its
     # own directory, next to its Cargo.toml - not the repo root.
     raw = PLUGINS / a.name / "target" / WASM_TARGET / "release" / f"{a.name}.wasm"
@@ -139,7 +181,7 @@ def cmd_test(a: argparse.Namespace) -> None:
     """Run the plugin's host-side unit tests (the TDD loop)."""
     run = [cargo(), "test", "--manifest-path", str(manifest(a.name))]
     print("   $", " ".join(run))
-    subprocess.run(run, check=True)
+    subprocess.run(run, check=True, env=rust_env())
 
 
 def cmd_flash(a: argparse.Namespace) -> None:
@@ -243,6 +285,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--seconds", type=int, help="stop after N seconds (for scripts/agents)")
     sp.add_argument("--until", help="stop when a line contains this text")
     sp.add_argument("--port", help="serial port (auto-detected if omitted)")
+    # Accepted and ignored: monitor never authenticates, but the docs/agents may
+    # pass --pin alongside other commands, so don't crash on it.
+    sp.add_argument("--pin", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_monitor)
 
     for verb, fn in (("list", cmd_list), ("start", cmd_start),
@@ -255,7 +300,22 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def reexec_in_venv() -> None:
+    """Re-run under the project's .venv Python so pyserial (flash/monitor) is
+    available no matter which Python invoked us."""
+    venv_dir = ROOT / ".venv"
+    py = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") \
+        / ("python.exe" if sys.platform == "win32" else "python")
+    try:
+        in_venv = Path(sys.prefix).resolve() == venv_dir.resolve()
+    except OSError:
+        in_venv = False
+    if py.exists() and not in_venv:
+        os.execv(str(py), [str(py), *sys.argv])
+
+
 def main() -> None:
+    reexec_in_venv()
     args = build_parser().parse_args()
     args.func(args)
 
