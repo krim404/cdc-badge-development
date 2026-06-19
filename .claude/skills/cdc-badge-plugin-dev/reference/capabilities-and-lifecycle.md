@@ -16,7 +16,7 @@ A gated call checks the declared capability first; denial returns
 | `host_http_open(...)` | `http: true` |
 | `host_socket_*` | `socket: true` |
 | `host_display_*` (low-level GFX) | `display_lowlevel: true` |
-| `host_ble_*` ⚠️ WIP | `ble: true` |
+| `host_ble_*` | `ble: true` |
 | `host_msg_*` | `ble: true` **and** non-empty `message_types` |
 | `host_usb_cdc_*` | `usb_cdc: true` |
 | `host_fs_*` (vFAT) | `vfat: true` |

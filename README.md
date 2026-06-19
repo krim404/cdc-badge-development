@@ -12,6 +12,13 @@ It contains **no firmware** - it bundles the tools, an AI assistant skill, and
 the official firmware/plugin projects (as `vendor/` submodules) so everything
 just works.
 
+> **Heads-up: the platform is pre-1.0 and under active development.** The CDC
+> Badge firmware and plugin SDK still change between versions and have bugs - so
+> something may break, not run correctly, or behave unexpectedly, and it may well
+> be the upstream platform rather than your plugin. The `vendor/` submodules are
+> pinned to a known state; update them deliberately, and report genuine platform
+> bugs upstream.
+
 ## ▶ Start here
 
 **New to all this? Follow [`EASY.md`](./EASY.md)** - it walks an absolute
@@ -59,6 +66,20 @@ learners.
 | `knowledge/index.md` | Links into the vendored SDK, host API and firmware docs |
 | `vendor/` | The firmware and plugin SDK (git submodules, updatable) |
 | `code-quality.md`, `EASY.md` | How to write good code; the beginner walkthrough |
+
+## Share your plugins (personal web flasher)
+
+Happy with your work? Push it to GitHub and you get **your own web flasher** -
+a page that installs *your* plugins onto a CDC Badge straight from the browser
+(WebSerial), with no toolchain. Share the link with colleagues.
+
+1. One-time: enable GitHub Pages - open your repo's **Settings → Pages**, then
+   under **Build and deployment** set **Source** to **GitHub Actions**.
+2. Push to `main`. The `deploy-flasher` workflow builds every plugin under
+   `plugins/` (**except** the `starter` test plugin), generates a catalog, and
+   publishes the flasher to your Pages URL (e.g. `https://<you>.github.io/cdc-badge-development/`).
+3. Send that link to a colleague. They open it in Chrome/Edge, connect the badge
+   over USB, and click install - same flasher as the official plugin catalog.
 
 ## Official resources
 

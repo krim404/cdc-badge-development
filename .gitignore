@@ -8,6 +8,13 @@
 # --- Build artifacts ---
 /dist
 /build
+/_site
+
+# --- Generated skill mirror ---
+# The cdc-badge-plugin-dev skill is committed once under .claude/skills and
+# mirrored into .agents/skills by scripts/setup.py. Don't commit the copy.
+# (The per-agent .agents/skills/speckit-* ARE committed - they differ per agent.)
+/.agents/skills/cdc-badge-plugin-dev/
 
 # --- Python (host-native bootstrap + tools) ---
 /.venv

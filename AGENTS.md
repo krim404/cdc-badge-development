@@ -54,3 +54,8 @@ host cannot reach USB (e.g. a container), use the WebSerial webflasher in
   reference, manifest schema, serial commands, and firmware specs).
 - Spec-driven development: the `specify`/`plan`/`tasks`/`implement` commands are
   committed and active for all three agents - no install needed.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

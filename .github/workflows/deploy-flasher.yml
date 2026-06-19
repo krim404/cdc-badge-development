@@ -1,0 +1,56 @@
+name: deploy-flasher
+
+# Builds a personal web flasher from your plugins and deploys it to GitHub Pages
+# on every push to main. Share the resulting Pages URL with colleagues - they can
+# install your plugins onto a CDC Badge from the browser (WebSerial), no toolchain
+# needed. The `starter` test plugin is intentionally excluded.
+#
+# This workflow tries to enable Pages automatically (configure-pages enablement).
+# If your org restricts that, enable it once by hand: repo Settings -> Pages,
+# then under "Build and deployment" set "Source" to "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bootstrap the toolchain
+        run: python scripts/setup.py
+
+      - name: Build the personal web flasher (excludes the starter)
+        run: python scripts/build_flasher.py
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

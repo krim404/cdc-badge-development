@@ -16,7 +16,7 @@ right place, then read the actual signature there - do not rely on memory.
 | `http` (streamed) | `http` | `http` | `host_http_open/read/...` |
 | `socket` | `socket` | `socket` | TCP/UDP client |
 | `wifi` | `wifi` | `wifi` | `host_wifi_request()` brings WiFi up |
-| `ble` ⚠️ WIP | `ble` | `ble` | GATT peripheral + central; untested on hardware |
+| `ble` | `ble` | `ble` | GATT peripheral + central |
 | `nvs` | `nvs` | none | per-plugin namespaced KV; isolated to `nvs_namespace` |
 | `vfat` | `fs` | `vfat` | sandboxed file storage |
 | `ui_views` | `ui` | none | toast/message/confirm/list/info; `ui::ListBuilder` |

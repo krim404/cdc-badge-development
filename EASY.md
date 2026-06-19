@@ -125,6 +125,22 @@ same commands are available (they are committed in the repo); invoke them the wa
 your tool runs commands. Tests are included by default, and the code follows
 `code-quality.md`.
 
+## 6. Share it with friends (your own web flasher)
+
+When you're happy with a plugin, let others install it from the browser - no
+toolchain needed:
+
+1. One-time: turn on GitHub Pages - open your repo's **Settings → Pages**, then
+   under **Build and deployment** set **Source** to **GitHub Actions**.
+2. Push your work to `main` (`git add -A && git commit -m "my plugin" && git push`).
+3. GitHub builds a personal web flasher and publishes it. Find the link in the
+   **Actions → deploy-flasher** run (or under Settings → Pages), e.g.
+   `https://<your-username>.github.io/cdc-badge-development/`.
+4. Send that link to a friend. They open it in Chrome/Edge, plug in their badge,
+   and click install.
+
+Your plugins are offered automatically; the `starter` test plugin is left out.
+
 ## Stuck?
 
 - Serial port "busy": close any open monitor - only one program can use the port.

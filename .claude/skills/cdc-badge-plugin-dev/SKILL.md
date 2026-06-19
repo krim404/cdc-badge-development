@@ -24,6 +24,11 @@ under `vendor/`.
   They are checked at load (slot/resource conflicts) and on every call. A denied
   call returns `HOST_ERR_NO_CAPABILITY`, logs a line, and the plugin keeps running.
 - **Lifecycle**: `load → init → prerequisites → on_enter → [running] → on_exit → deinit → unload`.
+- **The platform is pre-1.0 and a work in progress.** The firmware and host API
+  still change between versions and have bugs; if something breaks or behaves
+  oddly, it may be an upstream issue, not the plugin. Work against the pinned
+  `vendor/` versions, and when you hit a genuine platform bug report it upstream
+  rather than working around it by patching `vendor/`.
 
 ## Golden rules (always)
 
@@ -43,8 +48,7 @@ under `vendor/`.
 4. **Declare every capability you use** in `meta.json`. Don't `unwrap()` host calls -
    the host can return `HOST_ERR_NO_CAPABILITY` even for things you think you covered.
 5. **Build + test before claiming done**, prefer existing patterns (read
-   `vendor/cdc-badge-plugins/examples/`), keep changes minimal. Guard against the
-   AI-agent mistakes in `code-quality.md` and `reference/pitfalls.md`.
+   `vendor/cdc-badge-plugins/examples/`), keep changes minimal.
 
 ## Workflow (the commands)
 
@@ -60,48 +64,6 @@ python tools/badge.py list|start <id>|stop|delete <id>       # manage plugins on
 No host USB (e.g. a container)? Use the WebSerial webflasher in
 `vendor/cdc-badge-plugins/webflasher`. If the badge needs a PIN, add `--pin <pin>`.
 
-## Host API map (which module / capability)
-
-Find the canonical signatures in `host_api.h` (defgroups) and the safe wrapper in
-the SDK module. Full table in `reference/host-api-map.md`. The big families:
-
-| Area | SDK module | Capability needed |
-|------|-----------|-------------------|
-| Toasts, messages, confirms, lists, info views | `ui` | none |
-| Canvas (pixel drawing) / low-level GFX | `canvas`, `display` | `display_lowlevel` (low-level) |
-| Logging, time, power/battery, sysinfo, random | `log`/`time`/`power`/`sysinfo`/`random` | none |
-| Per-plugin key/value | `nvs` | none (isolated to your `nvs_namespace`) |
-| Networking | `wifi`/`http`/`socket` | `wifi` / `http` / `socket` |
-| Badge-to-badge messages | `msg` | `ble` + non-empty `message_types` |
-| Files (sandboxed vFAT) | `fs` | `vfat` |
-| Secure storage / keys | `rmem`/`ecc`/`secure_element`/`crypto` | named `rmem`/`ecc` (+ `nvs_namespace` for rmem) |
-| GPIO / PWM / ADC / I2C / SAO / pixel strip | `gpio`/`i2c`/`sao`/`pixel_strip` | `gpio_pins`/`pwm_pins`/`adc_pins`/`i2c_bus` or `grove`/`sao`/`pixel_strip` |
-| BLE GATT (⚠️ WIP, untested) | `ble` | `ble` |
-| EventBus, keypad, command channel, i18n | `event`/`keypad`/`cmd`/`i18n` | none |
-
-## The pitfalls that bite (read `reference/pitfalls.md` for all)
-
-- **Action callbacks**: `plugin_on_action(action, idx, user_data)` - bind logic to
-  `user_data` (the item id you set), **not** `idx` (on-screen position); they
-  differ when a list is shown sorted.
-- **GPIO is restricted**: only the user-pin whitelist; pins for display/TROPIC01/
-  USB/PSRAM/flash (incl. octal-PSRAM data lines **33-37**) are hard-blocked. A pin
-  already held by another plugin is rejected at load (`HOST_ERR_BUSY`).
-- **Text is UTF-8 across the API**: send normal UTF-8 strings; the host normalises
-  to the display encoding. Don't hand-roll byte transforms.
-- **Canvas back key**: a canvas key callback consumes **all** keys - handle the
-  back key (pop the view) or the user gets stuck.
-- **Don't flood the log**: make diagnostics conditional, never one line per tick/poll.
-- **NVS namespace** must start with `plg_`/`plugin_` and is isolated from system data.
-
-## Capabilities, lifecycle & errors
-
-See `reference/capabilities-and-lifecycle.md` for the full capability-gating table,
-behavioral caps (`background`/`autoload`/`prevent_sleep`), hardware shortcuts
-(`grove`/`sao`), prerequisites + `on_fail`, the lifecycle hooks and optional
-exports, and the `Result`/`Error` model (`HOST_ERR_*` codes). Manifest field rules
-are in `vendor/cdc-badge-plugins/docs/manifest_schema.md`.
-
 ## Debugging
 
 - Read the log with `badge monitor`. Interpret rejections: capability not declared
@@ -109,8 +71,15 @@ are in `vendor/cdc-badge-plugins/docs/manifest_schema.md`.
   the firmware, plugin too large, or auth needed.
 - Only one program can hold the serial port - close the monitor before flashing.
 
-## When unsure
+## Where the detail lives (read on demand, don't re-state here)
 
-Read, don't guess: `knowledge/index.md`, the SDK source under
-`vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/`, the examples, and the
-firmware dev docs in `vendor/cdc-badge-os/website/src/content/docs/dev/`.
+- **`reference/pitfalls.md`** - the badge-specific gotchas and the AI-agent mistakes
+  to guard against. Read it before writing code.
+- **`reference/host-api-map.md`** - which SDK module and capability each area maps to;
+  canonical signatures stay in `host_api.h`.
+- **`reference/capabilities-and-lifecycle.md`** - capability gating, behavioral caps,
+  hardware shortcuts, prerequisites, lifecycle hooks, and the `Result`/`Error` model.
+- Vendored ground truth: `knowledge/index.md`, the SDK source under
+  `vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/`, the examples, the manifest
+  schema (`vendor/cdc-badge-plugins/docs/manifest_schema.md`), and the firmware dev
+  docs in `vendor/cdc-badge-os/website/src/content/docs/dev/`.
