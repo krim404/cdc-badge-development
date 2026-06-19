@@ -20,6 +20,10 @@ under `vendor/`.
   `ui, log, time, power, nvs, i18n, event, keypad, cmd, sysinfo, random,`
   `http, socket, wifi, ble, msg, fs, rmem, ecc, crypto, secure_element,`
   `gpio, i2c, pwm/adc, sao, pixel_strip, canvas, display, lockscreen`.
+- **The UI is far more than the canvas.** Most plugins push ready-made host views -
+  lists, sliders, context menus, toasts, Y/N confirms, info screens, T9/password/
+  date/time/PIN/colour pickers - and never draw a pixel. The canvas is only for
+  custom drawing. See `reference/ui-views.md` (host views) and `reference/canvas.md`.
 - **Everything a plugin may do is gated by capabilities** declared in `meta.json`.
   They are checked at load (slot/resource conflicts) and on every call. A denied
   call returns `HOST_ERR_NO_CAPABILITY`, logs a line, and the plugin keeps running.
@@ -46,7 +50,7 @@ impractical - propose a version that fits instead:
   parsing, or large per-frame data.
 - **Memory:** ~8 MB octal PSRAM is the default pool, but internal SRAM (~512 KB)
   is the real bottleneck. A plugin declares its WASM `linear_memory_kb`
-  (16-1024 KB, i.e. ≤1 MB) - keep buffers small. All plugins and any files they
+  (16-4096 KB) - keep buffers small. All plugins and any files they
   store share a single **2 MB** vFAT partition; flash is 16 MB total.
 - **Network is modest/slow.** A small HTTP fetch occasionally is fine; large or
   frequent downloads are not, and WiFi must be brought up first (may be absent).
@@ -115,11 +119,27 @@ No host USB (e.g. a container)? Use the WebSerial webflasher in
 ## Where the detail lives (read on demand, don't re-state here)
 
 - **`reference/codebook.md`** - short, verified patterns from the real demos
-  (toast, menu, a proper canvas view, keypad, NVS, badge-to-badge). Copy these.
+  (toast, menu, a proper canvas view, keypad, NVS, badge-to-badge, and more). Copy these.
 - **`reference/pitfalls.md`** - the badge-specific gotchas and the AI-agent mistakes
   to guard against. Read it before writing code.
-- **`reference/host-api-map.md`** - which SDK module and capability each area maps to;
-  canonical signatures stay in `host_api.h`.
+- **`reference/host-api-map.md`** - the index: which SDK module, capability and
+  reference page each area maps to; canonical signatures stay in `host_api.h`.
+
+API reference by area (signatures + the per-view/per-call contracts):
+
+- **`reference/ui-views.md`** - host-rendered views: lists, sliders, context menus,
+  toasts/messages/confirms/info, T9/password/date/time/PIN/colour pickers, navigation,
+  icons, and the `idx`/`user_data` action-callback contract table.
+- **`reference/canvas.md`** - the plugin-drawn canvas: drawing primitives, fonts,
+  canvas widgets, and the key/widget event flow.
+- **`reference/storage.md`** - `nvs`, `fs` (vFAT), `rmem`.
+- **`reference/connectivity.md`** - `wifi`, `http`, `socket`, `ble`, `msg`.
+- **`reference/hardware.md`** - `gpio`/`pwm`/`adc`, `i2c`, `sao`, `pixel_strip`,
+  low-level `display`, and the pin whitelist/blocklist.
+- **`reference/crypto.md`** - `crypto` (hashing/AES), `secure_element` (ECC), `random`.
+- **`reference/system.md`** - `time`, `power`, `event`, `i18n`, `keypad`, `cmd`,
+  `sysinfo`, `usb`, `lockscreen`, `log`.
+
 - **`reference/capabilities-and-lifecycle.md`** - capability gating, behavioral caps,
   hardware shortcuts, prerequisites, lifecycle hooks, and the `Result`/`Error` model.
 - **`reference/debugging.md`** - manual debugging playbook: open the serial log
@@ -129,3 +149,8 @@ No host USB (e.g. a container)? Use the WebSerial webflasher in
   `vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/`, the examples, the manifest
   schema (`vendor/cdc-badge-plugins/docs/manifest_schema.md`), and the firmware dev
   docs in `vendor/cdc-badge-os/website/src/content/docs/dev/`.
+- Online docs (rendered, for research - the GitHub Pages build of the vendored
+  firmware): developer docs <https://krim404.github.io/cdc-badge-os/>, host API
+  reference <https://krim404.github.io/cdc-badge-os/dev/host-api/>, and the Doxygen
+  for `host_api.h` <https://krim404.github.io/cdc-badge-os/api/host__api_8h.html>.
+  Prefer the pinned `vendor/` sources when they disagree with the online build.

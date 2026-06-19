@@ -154,7 +154,10 @@ def cmd_new(a: argparse.Namespace) -> None:
         for lang in names:
             names[lang] = a.name
     meta_path.write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"created plugins/{a.name} - edit plugins/{a.name}/src/lib.rs, then: badge build {a.name}")
+    print(f"created plugins/{a.name}")
+    print(f"  - code:     plugins/{a.name}/src/lib.rs")
+    print(f"  - manifest: plugins/{a.name}/meta.json  (set the name, description, author, icon and capabilities)")
+    print(f"  then build it with: badge build {a.name}")
 
 
 def cmd_build(a: argparse.Namespace) -> Path:
@@ -194,6 +197,10 @@ def cmd_flash(a: argparse.Namespace) -> None:
     if a.start:
         # --start is a separate upload.py invocation (its own argument group).
         upload(["--start", a.name], a.pin, a.port)
+    # One clear completion line BEFORE the (blocking) monitor, so the job is
+    # obviously finished even if the monitor is interrupted.
+    done = "flashed and started" if a.start else "flashed"
+    print(f"Plugin '{a.name}' {done}. Run 'badge monitor' to see its log.")
     if a.monitor:
         _monitor(a.port, seconds=None, until=None)
 
@@ -217,6 +224,10 @@ def _monitor(port: str | None, seconds: int | None, until: str | None) -> None:
     try:
         with serial.Serial(port, BAUD, timeout=1) as ser:
             import time
+            # Let the line settle and drop any partial bytes already buffered, so
+            # the first lines aren't garbled when attaching mid-transmission.
+            time.sleep(0.2)
+            ser.reset_input_buffer()
             start = time.monotonic()
             while True:
                 line = ser.readline().decode(errors="replace").rstrip()
@@ -237,12 +248,18 @@ def cmd_monitor(a: argparse.Namespace) -> None:
     _monitor(a.port, a.seconds, a.until)
 
 
+def cmd_info(a: argparse.Namespace) -> None:
+    upload(["--info", a.name], a.pin, a.port)
+
+
 def cmd_list(a: argparse.Namespace) -> None:
     upload(["--list"], a.pin, a.port)
 
 
 def cmd_start(a: argparse.Namespace) -> None:
     upload(["--start", a.name], a.pin, a.port)
+    print(f"-> start requested for '{a.name}' (see the badge reply above). "
+          f"Run 'badge monitor' to watch its log.")
 
 
 def cmd_stop(a: argparse.Namespace) -> None:
@@ -290,10 +307,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--pin", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_monitor)
 
-    for verb, fn in (("list", cmd_list), ("start", cmd_start),
+    for verb, fn in (("info", cmd_info), ("list", cmd_list), ("start", cmd_start),
                      ("stop", cmd_stop), ("delete", cmd_delete)):
         sp = sub.add_parser(verb)
-        if verb in ("start", "delete"):
+        if verb in ("info", "start", "delete"):
             sp.add_argument("name")
         with_serial(sp)
         sp.set_defaults(func=fn)

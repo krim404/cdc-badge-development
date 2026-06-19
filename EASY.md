@@ -100,8 +100,7 @@ $ python3 tools/badge.py flash hello --start --monitor
 ```
 
 It uploads, starts the plugin, and streams its log (`--monitor` keeps running
-until you press Ctrl-C). No USB on your machine? Use the browser installer at
-<https://krim404.github.io/cdc-badge-plugins/>.
+until you press Ctrl-C).
 
 ### The AI way (vibe / spec-driven)
 
@@ -114,6 +113,14 @@ example:
 The built-in `cdc-badge-plugin-dev` skill guides the assistant through the exact
 commands above, writes a test first, comments the code for you, and reads the
 serial log to confirm it works.
+
+It should load automatically when you talk about plugins, but a loose "vibe"
+prompt sometimes slips past it - if the assistant seems to be guessing at the API,
+just tell it: *"use the cdc-badge-plugin-dev skill"*. And although the skill is
+written for the assistant, its reference pages under
+`.claude/skills/cdc-badge-plugin-dev/reference/` double as a concise human guide to
+the host API, the UI views and the badge's pitfalls - worth a read even if you
+build everything by hand.
 
 #### Spec-driven development (the full SDD loop)
 
@@ -179,8 +186,9 @@ Small things that fit the hardware well **and that the badge does not already do
 (it already has TOTP, a password vault, a lock-screen clock and vCard contact
 exchange built in - so build something new):
 
-- **Name tag** - show your name in big letters. It is a conference badge, after
-  all. Pure display, perfect for e-paper.
+- **Fancy name tag** - the badge already shows a plain name, so go beyond it: your
+  name in big styled letters with an icon, a drawn graphic, a border or pattern.
+  Pure display, perfect for e-paper.
 - **Counter / scorekeeper** - +/- on the keypad, one redraw per change.
 - **Dice, coin flip or random picker** - press a key, draw the result once (no animation).
 - **Magic 8-ball / decision maker** - ask, press a key, reveal a random answer.
@@ -198,8 +206,21 @@ exchange built in - so build something new):
 Not a good fit: fast animation, high-frame-rate games, or anything that redraws
 constantly - the e-paper cannot keep up.
 
+## Official docs (online)
+
+The firmware ships full docs, published on GitHub Pages:
+
+- **Developer & user docs (website):** <https://krim404.github.io/cdc-badge-os/>
+- **Host API reference (Doxygen):** <https://krim404.github.io/cdc-badge-os/api/>
+
+The same content is in the repo under `vendor/cdc-badge-os/website/` and in the
+canonical header `vendor/cdc-badge-plugins/sdk/host_api.h` - use those if you ever
+work offline.
+
 ## Stuck?
 
+- **A plugin is stuck / traps the screen**: press **Y and N together** to force-quit
+  the running app and return to the lockscreen.
 - **`python: command not found`**: on macOS/Linux use `python3` (Windows: `python`).
 - **Rust errors in VS Code** ("cannot find cargo/rustc", "failed to load workspace"):
   run **Setup**, then **Developer: Reload Window** (see step 3). Setup wires

@@ -14,10 +14,16 @@ The mistakes that cost real time on this platform. Apply these proactively.
   firmware runs on no one else's badge and breaks on the next submodule update.
   Find the intended path in the existing API, or file an upstream feature request;
   patching foreign code is the absolute last resort (see `code-quality.md`).
-- **`plugin_on_action(action_id, idx, user_data)`**: bind your logic to
-  `user_data` (the id you set on the item, e.g. `b.item(label, id, ...)`), **not**
-  `idx`. `idx` is the on-screen position; it differs from storage order when the
-  list is displayed sorted. Binding to `idx` runs the wrong command.
+- **`plugin_on_action(action_id, idx, user_data)`**: for a **list**, bind your
+  logic to `user_data` (the id you set on the item, e.g. `b.item(label, id, ...)`),
+  **not** `idx`. `idx` is the on-screen position; it differs from storage order
+  when the list is displayed sorted. Binding to `idx` runs the wrong command.
+  The same "read `user_data`" rule holds for a **canvas key** action: the host
+  puts the pressed key's ASCII code in `user_data` and the focused widget id in
+  `idx`. So read the key from `user_data`, never from `idx` (the canvas example in
+  `codebook.md` shows it). The full per-view contract (what each view puts in
+  `idx` vs `user_data`, and what to read back) is the table in `ui-views.md`; the
+  canvas key/widget event flow is in `canvas.md`.
 - **Don't `unwrap()` host calls.** The host can return `HOST_ERR_NO_CAPABILITY`
   even for something your manifest seems to cover. Use `?` and handle errors;
   fallible calls return `Result<T>`, pure lookups return `Option<T>`, infallible
@@ -36,7 +42,8 @@ The mistakes that cost real time on this platform. Apply these proactively.
   wired to the display SPI, TROPIC01, charger, USB, PSRAM or flash are hard-blocked -
   **including octal-PSRAM data lines GPIO 33-37** (touching them crashes the badge).
   Use `grove`/`sao` shortcuts for those ports. Two plugins wanting the same pin:
-  the second is rejected at load with `HOST_ERR_BUSY`.
+  the second is rejected at load with `HOST_ERR_BUSY`. The exact hard-block list and
+  user-pin whitelist (verbatim from the firmware) are in `hardware.md`.
 - **`rmem` requires `nvs_namespace`**; names are 1-15 chars. `ecc` names are
   1-15 chars and map to a reserved plugin slot pool (you never name a physical slot).
 - **`nvs_namespace`** must start with `plg_` or `plugin_`, be `[a-z0-9_]`, ≤15 chars.
@@ -70,7 +77,12 @@ The mistakes that cost real time on this platform. Apply these proactively.
   If you don't handle the back key (pop the view), the user is trapped. Always
   provide an exit.
 - **Pop your own modals/views on exit.** Leaving views on the stack when the plugin
-  is unloaded has historically caused use-after-free style crashes.
+  is unloaded has historically caused use-after-free style crashes. See the cleanup
+  checklist in `capabilities-and-lifecycle.md`.
+- **Don't double-pop a host dialog.** `push_confirm`, the slider, T9/password, and the
+  date/time/PIN/colour pickers **pop themselves before the action fires** - calling
+  `ui::pop()` again in their handler pops the view underneath. By contrast a list or
+  canvas you pushed stays up and is yours to pop. Contract table: `ui-views.md`.
 - **`background` vs `autoload`**: `background` keeps the plugin loaded and ticking
   after the user leaves; `autoload` starts it headless at boot (no `on_enter`).
   They are orthogonal. `prevent_sleep` holds a sleep inhibitor while loaded.

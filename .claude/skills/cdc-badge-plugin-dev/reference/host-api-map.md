@@ -5,6 +5,13 @@ Canonical signatures live in `vendor/cdc-badge-plugins/sdk/host_api.h` (grouped 
 `vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/`. Use this map to find the
 right place, then read the actual signature there - do not rely on memory.
 
+This page is the **index**: the **Detailed reference pages** list below points to
+the page for each area (signatures + the per-call contracts). For rendered online docs
+(GitHub Pages build of the vendored firmware) see the host API reference
+<https://krim404.github.io/cdc-badge-os/dev/host-api/> and the Doxygen for
+`host_api.h` <https://krim404.github.io/cdc-badge-os/api/host__api_8h.html>; prefer
+the pinned `vendor/` sources when they disagree.
+
 | host_api.h defgroup | SDK module | Capability | Notes |
 |---------------------|-----------|------------|-------|
 | `logging` | `log` | none | `log::info/warn/error/debug(tag, msg)` |
@@ -32,6 +39,23 @@ right place, then read the actual signature there - do not rely on memory.
 | `gpio` (GPIO/PWM/ADC/I2C/SAO) | `gpio`/`i2c`/`sao` | `gpio_pins`/`pwm_pins`/`adc_pins`/`i2c_bus` or `grove`/`sao` | bus 0 reserved |
 | `pixel_strip` | `pixel_strip` | `pixel_strip` | addressable LED strip |
 | `lockscreen` | `lockscreen` | none | quick-action slot |
+
+## Detailed reference pages
+
+Signatures, per-call contracts and a snippet per family:
+
+| Area | Page |
+|------|------|
+| Host-rendered views (lists, sliders, menus, dialogs, pickers, icons, callback contract) | `ui-views.md` |
+| Plugin-drawn canvas + widgets | `canvas.md` |
+| `nvs`, `fs` (vFAT), `rmem` | `storage.md` |
+| `wifi`, `http`, `socket`, `ble`, `msg` | `connectivity.md` |
+| `gpio`/`pwm`/`adc`, `i2c`, `sao`, `pixel_strip`, low-level `display`, pin policy | `hardware.md` |
+| `crypto`, `secure_element` (ECC), `random` | `crypto.md` |
+| `time`, `power`, `event`, `i18n`, `keypad`, `cmd`, `sysinfo`, `usb`, `lockscreen`, `log` | `system.md` |
+
+Capability, behavioral flags and lifecycle: `capabilities-and-lifecycle.md`.
+Copy-ready patterns: `codebook.md`.
 
 ## Counts (rough surface size, for orientation)
 

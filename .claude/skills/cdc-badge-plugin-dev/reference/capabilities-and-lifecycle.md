@@ -3,6 +3,34 @@
 Authoritative manifest field rules: `vendor/cdc-badge-plugins/docs/manifest_schema.md`
 and `capabilities.md`. This is the working summary.
 
+## `meta.json` skeleton
+
+Declare only what you use; every gated call needs its capability here or it fails
+at runtime with `HOST_ERR_NO_CAPABILITY`. Full field rules: `manifest_schema.md`.
+
+```json
+{
+  "id": "hello",
+  "version": "0.1.0",
+  "host_api_level_min": "0.7",
+  "linear_memory_kb": 64,
+  "i18n": { "default_language": "en",
+            "meta": { "name": { "en": "Hello" }, "description": { "en": "..." } },
+            "strings": { "save": { "en": "Save", "de": "Speichern" } } },
+  "capabilities": {
+    "wifi": false, "http": false, "socket": false, "ble": false,
+    "vfat": false, "display_lowlevel": false, "usb_cdc": false,
+    "pixel_strip": false, "ui_exclusive": false,
+    "background": false, "autoload": false, "prevent_sleep": false,
+    "grove": false, "sao": false,
+    "gpio_pins": [], "pwm_pins": [], "adc_pins": [], "i2c_bus": [],
+    "rmem": [], "ecc": [], "ble_service_uuids": [], "message_types": [],
+    "nvs_namespace": "plg_hello"
+  },
+  "prerequisites": {}
+}
+```
+
 ## Capability gating (runtime)
 
 A gated call checks the declared capability first; denial returns
@@ -68,6 +96,18 @@ Optional exports:
 | `plugin_on_tick(uptime_ms)` | **~every 50 ms (~20×/second)** - NOT a redraw signal; throttle UI updates to real changes (see e-paper pitfalls) |
 | `plugin_on_cmd(len)` | host forwarded a command string; pull with `cmd::consume` |
 | `plugin_on_prerequisite_failed(prereq_id, error_code)` | a `callback` prerequisite failed |
+
+## Cleanup (`plugin_on_exit` / `plugin_deinit`)
+
+Release in `on_exit` (per visit) or `deinit` (on unload) whatever you acquired, or
+the resource leaks and can wedge other plugins or crash on unload:
+
+- pop any view/modal you pushed (`ui::pop` / `ui::pop_to_plugin`) - leaving views on
+  the stack at unload has caused use-after-free crashes (see `pitfalls.md`).
+- `msg::unregister_handler` / `ble::unregister_service` for anything you registered.
+- `ui::release_exclusive` if you took the UI lock; `wifi::release` if you brought WiFi up.
+- `gpio::release` / `pwm_stop` / `pixel_strip::deinit` for hardware you claimed.
+- `event::unsubscribe` for EventBus subscriptions.
 
 ## Prerequisites (`meta.json` `prerequisites`)
 

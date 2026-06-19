@@ -9,6 +9,11 @@ These snippets assume the standard plugin layout (`#![cfg_attr(target_arch = "wa
 `extern crate alloc;`, `use cdc_badge_plugin::{...}`). See `plugins/starter` and
 `examples/hello_world` for the minimal skeleton.
 
+These are starting points, not the full API. For every view and call - signatures,
+the `idx`/`user_data` contract per view, and the rest of each family - see the
+reference pages: `ui-views.md`, `canvas.md`, `storage.md`, `connectivity.md`,
+`hardware.md`, `crypto.md`, `system.md` (indexed in `host-api-map.md`).
+
 ## Toast / info box
 
 ```rust
@@ -156,4 +161,92 @@ pub extern "C" fn plugin_on_action(action_id: u32, _idx: u32, _ud: u32) -> i32 {
 pub extern "C" fn plugin_deinit() -> i32 {
     msg::unregister_handler("text/plain"); 0
 }
+```
+
+## Confirm before a destructive action
+
+The dialog pops itself before firing - do **not** pop again (see `pitfalls.md`).
+
+```rust
+const ACT_DEL: u32 = 4;
+ui::push_confirm("Delete all?", ui::UI_ICON_ALERT, ACT_DEL);
+
+// in plugin_on_action(ACT_DEL, _idx, user_data):
+if user_data == 1 { /* Y: delete */ } else { /* N: cancelled */ }
+```
+
+## A settings slider (persist to NVS)
+
+Full view contract: `ui-views.md`.
+
+```rust
+const ACT_BRIGHT: u32 = 6;
+ui::SliderBuilder::new("Brightness")
+    .range(0, 100).initial(50).step(5).unit("%")
+    .on_save(ACT_BRIGHT)
+    .push();
+
+// in plugin_on_action(ACT_BRIGHT, _idx, user_data):
+if user_data == 1 {                       // 1 = confirmed, 0 = cancelled
+    if let Some(v) = ui::consume_input_int() { let _ = nvs::set_u32("bright", v as u32); }
+}
+```
+
+## A context menu ([3] popup)
+
+```rust
+const ACT_CTX: u32 = 5;
+const ID_STOP: u32 = 50;
+ui::ContextMenuBuilder::new("Options")
+    .on_select(ACT_CTX)                       // -> on_action(ACT_CTX, position, item_id)
+    .item("Stop", ID_STOP, ui::UI_ICON_REMOVE)
+    .push();                                  // cancel auto-pops, fires nothing
+```
+
+## Fetch once over HTTP and show it
+
+Needs `"http": true` and WiFi up (declare the `wifi_connected` prerequisite, or call
+`wifi::request`). Stream the body and render **once** - never poll on a tick. Full
+examples: `examples/news_feed`, `plugins/home_assistant`. Details: `connectivity.md`.
+
+```rust
+let req = http::Request::open(http::GET, "https://example.com/feed.json", 8000)?;
+req.header("Accept", "application/json")?;
+if req.perform()? == 200 {
+    let body = req.read_to_string()?;         // UTF-8, streamed in chunks
+    ui::push_info("Feed", &body);
+}   // request closed on drop
+```
+
+## Blink a Grove LED (GPIO)
+
+Needs `"grove": true` (or the pin in `gpio_pins`). Pin policy: `hardware.md`. Full
+example: `examples/grove_blink`, `plugins/grove_led`.
+
+```rust
+use cdc_badge_plugin::gpio::{self, Direction};
+gpio::set_direction(gpio::pins::GROVE_0, Direction::Output)?;
+gpio::write(gpio::pins::GROVE_0, true)?;      // LED on
+```
+
+## React to system events
+
+Subscribe to EventBus types; matches arrive via the `plugin_on_event` export. Full
+mask list and dispatch contract: `system.md`.
+
+```rust
+const ACT_EVT: u32 = 7;
+event::subscribe(event::POWER_BATT_LOW | event::SYSTEM_UNLOCK, ACT_EVT).ok();
+// release in plugin_deinit with event::unsubscribe(id).
+```
+
+## A lock-screen quick action (background plugin)
+
+Needs `"background": true`; the action fires even while your view is not in front.
+Full contract: `system.md`.
+
+```rust
+const ACT_OPEN: u32 = 8;
+lockscreen::register("open_label", ACT_OPEN).ok();   // label_key resolved via i18n
+// when the user picks it: plugin_on_action(ACT_OPEN, 0, 0)
 ```
