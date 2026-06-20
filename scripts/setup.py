@@ -128,6 +128,44 @@ def discover_cargo() -> str | None:
     return None
 
 
+def repair_broken_cargo_proxies() -> None:
+    """Fix broken `~/.cargo/bin` rustup proxies in place (Homebrew shim bug).
+
+    Homebrew's rustup writes shell wrappers in `~/.cargo/bin` that `exec rustup
+    "$@"` without preserving `argv[0]`, so `cargo` runs as `rustup` and every
+    cargo call fails. rust-analyzer invokes `$CARGO_HOME/bin/cargo` directly, so
+    PATH/`CARGO` cannot redirect it - the shim itself must be correct. A proper
+    proxy passes the tool name with `exec -a`. Idempotent; backs up each rewritten
+    shim as `<tool>.cdcbak`.
+    """
+    if os.name == "nt":
+        return
+    bindir = Path(os.environ.get("CARGO_HOME") or (Path.home() / ".cargo")) / "bin"
+    if not bindir.is_dir():
+        return
+    fixed = []
+    for tool in ("cargo", "cargo-clippy", "cargo-fmt", "clippy-driver",
+                 "rustc", "rustdoc", "rustfmt"):
+        f = bindir / tool
+        try:
+            text = f.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        # Only the broken wrapper: a script that execs rustup but drops argv[0].
+        if "exec -a" in text or "rustup" not in text or 'exec "' not in text:
+            continue
+        try:
+            shutil.copy2(f, Path(str(f) + ".cdcbak"))
+            f.write_text(text.replace('exec "', f'exec -a {tool} "', 1))
+            f.chmod(0o755)
+            fixed.append(tool)
+        except OSError:
+            pass
+    if fixed:
+        print(f"   repaired broken ~/.cargo/bin rustup proxies: {', '.join(fixed)} "
+              "(backups: *.cdcbak)")
+
+
 def register_toolchain() -> None:
     """Make a WORKING cargo/rustc discoverable for every consumer - this script,
     the badge CLI, rust-analyzer and the shell - on macOS, Linux and Windows.
@@ -137,8 +175,11 @@ def register_toolchain() -> None:
     `rustup "$@"` and so behaves as rustup, not cargo). Instead we discover the
     real toolchain bin dir (the one `rustup which cargo` points into) and put
     THAT first - so the real binaries win over any broken shim. No hardcoded paths.
+    Broken `~/.cargo/bin` proxies (which rust-analyzer calls directly) are also
+    repaired in place.
     """
     step("Registering the Rust toolchain (CLI, shell + rust-analyzer)")
+    repair_broken_cargo_proxies()
     cargo = discover_cargo()
     if not cargo:
         print("   note: could not verify a working cargo. Re-run after installing "
@@ -156,7 +197,7 @@ def register_toolchain() -> None:
         _register_path_windows(tc_bin)
     else:
         _register_path_unix(tc_bin)
-    _write_vscode_rust_env(tc_bin)
+    _write_vscode_rust_env(tc_bin, cargo)
 
     if is_real_cargo(shutil.which("cargo") or ""):
         print("   cargo + rustc resolve to the real toolchain")
@@ -204,14 +245,18 @@ def _register_path_windows(tc_bin: str) -> None:
         pass
 
 
-def _write_vscode_rust_env(tc_bin: str) -> None:
+def _write_vscode_rust_env(tc_bin: str, cargo: str) -> None:
     """Point rust-analyzer at the real toolchain via .vscode/settings.json.
 
-    Setting the server's PATH explicitly means the IDE uses the real cargo/rustc
-    regardless of how VS Code was launched (Dock/Start menu vs. a shell), and
-    regardless of any broken `~/.cargo/bin` shim. The file is machine-specific
-    and git-ignored; this regenerates it on every setup. linkedProjects lists
-    every plugin crate present so rust-analyzer indexes them all.
+    rust-analyzer resolves `cargo`/`rustc` as: the `CARGO`/`RUSTC` env vars,
+    then `~/.cargo/bin`, then `PATH`. A broken `~/.cargo/bin` shim (e.g.
+    Homebrew's rustup proxy, whose `cargo` reports as `rustup`) thus wins over
+    any `PATH` entry, so `PATH` alone cannot redirect it. `CARGO`/`RUSTC` set to
+    the real toolchain binaries are the only lever with precedence; `PATH` is
+    additionally cleaned of the `~/.cargo/bin` shim dir so spawned subprocesses
+    also see the real toolchain. The file is machine-specific and git-ignored;
+    this regenerates it on every setup. linkedProjects lists every plugin crate
+    so rust-analyzer indexes them all.
     """
     vscode = ROOT / ".vscode"
     vscode.mkdir(exist_ok=True)
@@ -227,14 +272,21 @@ def _write_vscode_rust_env(tc_bin: str) -> None:
                       for p in (ROOT / "plugins").glob("*/Cargo.toml"))
     if projects:
         settings["rust-analyzer.linkedProjects"] = projects
-    # Toolchain bin first, then the inherited PATH with duplicates/empties removed.
-    seen = {tc_bin}
+    rustc = str(Path(tc_bin) / ("rustc.exe" if os.name == "nt" else "rustc"))
+    # Toolchain bin first; drop empties, duplicates and the ~/.cargo/bin shim dir.
+    cargo_home = os.environ.get("CARGO_HOME") or str(Path.home() / ".cargo")
+    shim_bin = str(Path(cargo_home) / "bin")
+    seen = {tc_bin, shim_bin}
     entries = [tc_bin]
     for part in os.environ.get("PATH", "").split(os.pathsep):
         if part and part not in seen:
             seen.add(part)
             entries.append(part)
-    settings["rust-analyzer.server.extraEnv"] = {"PATH": os.pathsep.join(entries)}
+    settings["rust-analyzer.server.extraEnv"] = {
+        "CARGO": cargo,
+        "RUSTC": rustc,
+        "PATH": os.pathsep.join(entries),
+    }
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
     print(f"   wrote {settings_path.relative_to(ROOT)} (rust-analyzer -> real toolchain)")
 

@@ -47,6 +47,10 @@ Font ids (codepage matters for non-ASCII):
 pass candidates largest-to-smallest, the last is the fallback. It does NOT check the
 128 px height - cap the size and keep your own y-offsets inside `body_size().1`.
 
+**Symbols:** to draw a CP437 pictograph (♥ ↑ ░ ...) pass its Unicode character to
+`draw_text`; the host maps UTF-8 to CP437. The full glyph set and the two
+exceptions (`0x0A` / `0x0D`) are in `ui-views.md` (Icons & symbols).
+
 ## Shapes
 
 ```rust
@@ -88,8 +92,11 @@ The canvas fires two separate actions, set in `push(title, key_action_id, widget
 So read the pressed key from **`user_data`**, never `idx` (the #1 canvas mistake,
 see `pitfalls.md`). With no focused widget, every key reaches `key_action_id`.
 
-**Back-key footgun:** the canvas key callback receives *every* key while the canvas
-is foreground. You must handle the back key and `ui::pop()`, or the user is trapped.
+**Back-key footgun & key conventions:** the canvas key callback receives *every* key
+while the canvas is foreground, so you must follow the keypad conventions yourself
+(`ui-views.md`): `N` = back (call `ui::pop()`, or the user is trapped), `Y` = select,
+`2`/`8` = scroll, `4`/`6` = left/right, `3` = menu. Long-press `N` force-quits the
+plugin (firmware-handled - you never see it).
 
 Registering `set_long_press_action` opts the canvas into deferred input: a tap fires
 the key callback on **release**, a hold fires the long-press action and suppresses the tap.

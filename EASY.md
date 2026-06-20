@@ -226,8 +226,10 @@ work offline.
   run **Setup**, then **Developer: Reload Window** (see step 3). Setup wires
   rust-analyzer to the toolchain via `.vscode/settings.json`.
 - **Serial port "busy"**: close any open monitor - only one program can hold the port.
-- **Badge asks for a PIN**: add `--pin <pin>` to the **flash** command. The
-  `monitor` command needs no PIN.
+- **Badge asks for a PIN**: add `--pin <pin>` to the **flash** command (the
+  badge's PIN, factory default `123456`). The `monitor` command needs no PIN.
+  If `123456` is rejected, ask the badge's owner for the PIN - never try other
+  PINs, repeated wrong attempts lock the badge.
 - **`flash --monitor` never returns**: that is expected - it streams the log until
   Ctrl-C. For a bounded read (scripts/agents) use `monitor --seconds N` or
   `monitor --until "<text>"`.

@@ -26,6 +26,25 @@ and the `host_ui_*` C signatures in `host_api.h`. All text is UTF-8.
 | Enter a numeric PIN (confirm gesture, value not returned) | `push_pin_entry` |
 | Draw your own layout / widgets | `canvas` (see `canvas.md`) |
 
+## Keypad conventions (expected behaviour)
+
+The 12-key pad drives every view. Host-rendered views (lists, sliders, pickers,
+context menus) already implement these; a **canvas** receives the raw key in the
+callback's `user_data` (ASCII) and must honour them itself (`canvas.md`).
+
+| Key | ASCII | Role |
+|-----|-------|------|
+| `2` / `8` | `'2'` / `'8'` | scroll / move up / down |
+| `4` / `6` | `'4'` / `'6'` | left / right (adjust a value, move between fields) |
+| `Y` | `'Y'` | select / confirm |
+| `N` | `'N'` | back (pop the current view) |
+| `N` held | - | **force-quit** the plugin (firmware-handled, returns to the lock screen) |
+| `3` | `'3'` | menu key: opens a `ContextMenuView` (a list's `on_menu` fires; plugins build one with `ContextMenuBuilder`) |
+
+A canvas plugin should at minimum pop on `N` (`ui::pop()`), select on `Y`, and
+scroll its content on `2`/`8`, so it behaves like the rest of the OS. Long-press
+`N` is global - the firmware quits the plugin, so you never handle it yourself.
+
 ## Toasts, messages, dialogs
 
 ```rust
@@ -71,8 +90,9 @@ ui::set_list_empty(text);                                         // placeholder
 
 ## Context menu (`ContextMenuBuilder`)
 
-A modal popup, conventionally opened by the `[3]` key (the lock-screen / plugin-list
-context menu uses the same widget).
+A modal popup - the firmware's `ContextMenuView`, the same overlay the OS opens on
+its lists, file explorer and lock screen (via `cdc::ui::showContextMenu`) when the
+user presses the `[3]` menu key.
 
 ```rust
 ui::ContextMenuBuilder::new("Options")
@@ -83,6 +103,11 @@ ui::ContextMenuBuilder::new("Options")
 
 On select fires `idx` = item position, `user_data` = `item_id`. On cancel the host
 pops the menu automatically and fires **nothing**.
+
+**Up to 8 entries** (`ContextMenuView::MAX_ITEMS` = 8): 4 are visible at once and
+the menu scrolls through the rest with up/down arrows. Pushing more than 8 items
+is rejected with `HOST_ERR_INVALID_ARG`, so keep menus within the limit (or push a
+`ListBuilder` for an arbitrarily long, scrollable choice).
 
 ## Slider (`SliderBuilder`)
 
@@ -175,9 +200,10 @@ the action fires** - do NOT call `ui::pop()` in their handler. By contrast a lis
 canvas you pushed stays up: you must pop it yourself (the canvas back-key footgun in
 `pitfalls.md`).
 
-## Icons (`UI_ICON_*`)
+## Icons & symbols (`UI_ICON_*`)
 
-Re-exported from `ui` (and `ffi`); pass to `item` / `push_toast` / `push_message` / `push_confirm`:
+The icon byte is a CP437 codepoint drawn by the built-in 6x8 font. The full set
+(bytes 0x01-0x1F) works as a **list / context-menu item icon**:
 
 ```
 UI_ICON_NONE     UI_ICON_INFO     UI_ICON_SUCCESS   UI_ICON_ERROR    UI_ICON_ALERT
@@ -191,4 +217,15 @@ UI_ICON_MALE     UI_ICON_FEMALE   UI_ICON_MUSIC    UI_ICON_NOTES    UI_ICON_LIGH
 UI_ICON_SUN      UI_ICON_TASK     UI_ICON_SECTION  UI_ICON_PARAGRAPH
 ```
 
-Exact set: the `pub use ffi::{ ... }` block in `ui.rs`. Unknown ids render as blank.
+Exact set: the `pub use ffi::{ ... }` block in `ui.rs`. `UI_ICON_NONE` (0) draws a
+default bullet. **Toast / message / confirm views honor only a small fixed set**
+(success, error, info, alert); other ids show no icon there.
+
+To draw a symbol **in text** (a label, or `canvas::draw_text` - see `canvas.md`),
+pass its normal Unicode character: the host maps UTF-8 to CP437, so `"♥"` renders
+the heart, `"→"` the arrow, plus the CP437 high half (accents, box-drawing, Greek,
+maths) and ASCII. Two glyphs can't be drawn as text (`0x0A`, `0x0D` - the renderer
+eats them as newline/CR); use those only as list icons.
+
+Rendered glyph charts (every icon and the full CP437 page, for humans):
+<https://krim404.github.io/cdc-badge-os/dev/host-api/#symbols-and-icons>.

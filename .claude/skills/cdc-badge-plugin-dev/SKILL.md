@@ -99,7 +99,9 @@ python tools/badge.py list|start <id>|stop|delete <id>       # manage plugins on
 ```
 
 No host USB (e.g. a container)? Use the WebSerial webflasher in
-`vendor/cdc-badge-plugins/webflasher`. If the badge needs a PIN, add `--pin <pin>`.
+`vendor/cdc-badge-plugins/webflasher`. If the badge needs a PIN, add `--pin <pin>`
+(factory default `123456`); if it is rejected, ask the user for the PIN - never
+try other PINs, repeated wrong attempts lock the badge.
 
 ## Debugging & verifying
 

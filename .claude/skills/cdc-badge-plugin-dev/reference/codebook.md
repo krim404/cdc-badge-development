@@ -14,6 +14,38 @@ the `idx`/`user_data` contract per view, and the rest of each family - see the
 reference pages: `ui-views.md`, `canvas.md`, `storage.md`, `connectivity.md`,
 `hardware.md`, `crypto.md`, `system.md` (indexed in `host-api-map.md`).
 
+## Plugin state across hooks
+
+Lifecycle hooks are separate calls, so persistent state lives in a `static`. WASM
+runs single-threaded, so wrap it in a tiny `Sync` cell rather than raw `static mut`
+(the `examples/sci_calc` and `examples/canvas_demo` pattern):
+
+```rust
+use core::cell::RefCell;
+struct PluginCell<T>(RefCell<T>);
+unsafe impl<T> Sync for PluginCell<T> {}
+impl<T> PluginCell<T> {
+    const fn new(v: T) -> Self { Self(RefCell::new(v)) }
+}
+static STATE: PluginCell<u64> = PluginCell::new(0);
+// access: STATE.0.borrow() / STATE.0.borrow_mut()
+```
+
+For a single `Copy` value use `core::cell::Cell` instead of `RefCell`.
+
+## Dynamic strings
+
+The crate is `no_std`, so the bare `format!` macro does not resolve - that is
+expected, not a setup problem. Allocation works (the SDK bundles an allocator),
+so build owned strings with `alloc::format!` after `extern crate alloc;`:
+
+```rust
+let label = alloc::format!("{:02}:{:02}", minutes, seconds);
+ui::push_toast(&label, ui::UI_ICON_SUCCESS, 1500);
+```
+
+Use `alloc::format!` for numbers and dynamic text; do not hand-roll byte arrays.
+
 ## Toast / info box
 
 ```rust
