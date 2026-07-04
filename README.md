@@ -50,6 +50,23 @@ Your code lives in **`plugins/hello/src/lib.rs`**. If your computer can't reach
 the badge over USB, use the browser installer (WebSerial) at
 <https://krim404.github.io/cdc-badge-plugins/> instead.
 
+### No badge at hand? Use the emulator
+
+The repo ships an **off-device emulator** that runs your plugin against the
+real firmware drawing stack and host API - what you see is pixel-identical to
+the e-paper. Build it once, then iterate without hardware:
+
+```sh
+cmake -S emulator -B emulator/build && cmake --build emulator/build
+python3 tools/badge.py emulate hello          # opens a window; keys 0-9/Y/N + arrows
+python3 tools/badge.py emulate hello --headless --keys 1,2,Y --frames out/
+```
+
+While it runs, the terminal doubles as the badge's serial console: type `help`
+for commands like `paste <text>` (into an open T9 editor), `key`, `event`,
+`cmd` or `screenshot`. See [`emulator/README.md`](./emulator/README.md) for
+everything it can (and deliberately cannot) do.
+
 ### Vibe / spec-driven (AI)
 
 Open the repo in **Claude Code**, **Codex** or **opencode**. A ready-made skill
@@ -76,7 +93,8 @@ these limits and will tell you if an idea won't fit - see `EASY.md` → "Ideas t
 | Path | What |
 |------|------|
 | `scripts/setup.py` | One-command, cross-platform toolchain setup |
-| `tools/badge.py` | The `badge` command: new/build/test/flash/monitor |
+| `tools/badge.py` | The `badge` command: new/build/test/emulate/flash/monitor |
+| `emulator/` | Off-device emulator: run plugins without a badge ([guide](./emulator/README.md)) |
 | `plugins/starter/` | A commented, test-ready example plugin |
 | `.claude/skills/`, `.agents/skills/` | The AI plugin-dev skill + Spec Kit commands |
 | `knowledge/index.md` | Links into the vendored SDK, host API and firmware docs |

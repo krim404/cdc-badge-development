@@ -342,6 +342,46 @@ def ensure_wasm_opt() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# 3b. C++ toolchain + CMake (for the off-device emulator)                     #
+# --------------------------------------------------------------------------- #
+def ensure_cpp_toolchain() -> None:
+    """Verify a C++ compiler and CMake for building the plugin emulator.
+
+    In keeping with this script's philosophy (nothing system-wide), compilers
+    and CMake are verified, not installed: they come from the OS package
+    manager / Xcode / Visual Studio. Missing pieces produce clear, per-OS
+    install instructions instead of a half-broken automatic install.
+    """
+    step("Checking the C++ toolchain for the emulator (cmake + compiler)")
+    sysname = platform.system()
+    missing = []
+    if not have("cmake"):
+        missing.append("cmake")
+    if not (have("c++") or have("g++") or have("clang++") or have("cl")):
+        missing.append("a C++ compiler")
+    if missing:
+        hints = {
+            "Linux": "   sudo apt install build-essential cmake libsdl2-dev",
+            "Darwin": "   xcode-select --install && brew install cmake sdl2",
+            "Windows": "   winget install Kitware.CMake Microsoft.VisualStudio.2022.BuildTools",
+        }
+        print(f"   missing: {', '.join(missing)}. The emulator (badge emulate) "
+              "needs them; plugins build fine without.")
+        print("   install with:")
+        print(hints.get(sysname, "   (install cmake and a C++17 compiler)"))
+        return
+    print("   cmake + C++ compiler found")
+    # The interactive window frontend links SDL2; without the dev package the
+    # emulator still builds, just headless-only (PNG output).
+    if sysname != "Windows" and have("pkg-config"):
+        rc = subprocess.run(["pkg-config", "--exists", "sdl2"], check=False)
+        if rc.returncode != 0:
+            print("   note: SDL2 dev package not found - the emulator will build "
+                  "headless-only. For a window install libsdl2-dev (Linux) / "
+                  "sdl2 (brew).")
+
+
+# --------------------------------------------------------------------------- #
 # 4. Python venv + host tooling                                               #
 # --------------------------------------------------------------------------- #
 def ensure_venv() -> None:
@@ -381,6 +421,7 @@ def main() -> None:
     init_submodules()
     ensure_rust()
     ensure_wasm_opt()
+    ensure_cpp_toolchain()
     ensure_venv()
     sync_skill()
     step("Done. Next: open a plugin and run  python tools/badge.py build starter")

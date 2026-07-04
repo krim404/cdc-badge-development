@@ -32,6 +32,8 @@ PLUGINS = ROOT / "plugins"
 DIST = ROOT / "dist"
 STARTER = PLUGINS / "starter"
 UPLOAD_PY = ROOT / "vendor" / "cdc-badge-os" / "tools" / "upload.py"
+VENDOR_PLUGINS = ROOT / "vendor" / "cdc-badge-plugins"
+EMULATOR_DIR = ROOT / "emulator"
 WASM_TARGET = "wasm32-unknown-unknown"
 WASM_OPT_FLAGS = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
 BINARYEN_VERSION = "version_119"
@@ -160,24 +162,44 @@ def cmd_new(a: argparse.Namespace) -> None:
     print(f"  then build it with: badge build {a.name}")
 
 
-def cmd_build(a: argparse.Namespace) -> Path:
-    """Compile to wasm and size-optimise with wasm-opt; return the artifact."""
+def build_wasm(plugin_dir: Path, name: str) -> Path:
+    """Compile a plugin directory to wasm, size-optimise it, return the artifact."""
+    cargo_toml = plugin_dir / "Cargo.toml"
+    if not cargo_toml.exists():
+        fail(f"no Cargo.toml in {plugin_dir}")
     run = [cargo(), "build", "--release", "--target", WASM_TARGET,
-           "--manifest-path", str(manifest(a.name))]
+           "--manifest-path", str(cargo_toml)]
     print("   $", " ".join(run))
     subprocess.run(run, check=True, env=rust_env())
     # A standalone plugin (no cargo workspace) puts its build output under its
-    # own directory, next to its Cargo.toml - not the repo root.
-    raw = PLUGINS / a.name / "target" / WASM_TARGET / "release" / f"{a.name}.wasm"
-    if not raw.exists():
-        fail(f"expected {raw} but it was not produced")
+    # own directory, next to its Cargo.toml - not the repo root. Vendored
+    # examples share one workspace target dir at the vendor repo root.
+    candidates = [
+        plugin_dir / "target" / WASM_TARGET / "release" / f"{name}.wasm",
+        VENDOR_PLUGINS / "target" / WASM_TARGET / "release" / f"{name}.wasm",
+    ]
+    raw = next((c for c in candidates if c.exists()), None)
+    if raw is None:
+        fail(f"expected one of {[str(c) for c in candidates]} but none was produced")
     DIST.mkdir(exist_ok=True)
-    out = DIST / f"{a.name}.wasm"
+    out = DIST / f"{name}.wasm"
     opt = [wasm_opt(), *WASM_OPT_FLAGS, str(raw), "-o", str(out)]
     print("   $", " ".join(opt))
     subprocess.run(opt, check=True)
     print(f"built {out}")
     return out
+
+
+def cmd_build(a: argparse.Namespace) -> Path:
+    """Compile to wasm and size-optimise with wasm-opt; return the artifact.
+
+    Accepts the same references as `emulate`: a plugin in plugins/ or one of
+    the vendored example/plugin sets (e.g. `badge build canvas_demo`).
+    """
+    src_dir, _, _ = resolve_plugin(a.name)
+    if src_dir is None:
+        fail(f"{a.name} is a .wasm path - nothing to build")
+    return build_wasm(src_dir, src_dir.name)
 
 
 def cmd_test(a: argparse.Namespace) -> None:
@@ -248,6 +270,86 @@ def cmd_monitor(a: argparse.Namespace) -> None:
     _monitor(a.port, a.seconds, a.until)
 
 
+# --------------------------------------------------------------------------- #
+# Emulator                                                                    #
+# --------------------------------------------------------------------------- #
+def resolve_plugin(ref: str) -> tuple[Path | None, Path, Path]:
+    """Resolve a plugin reference to (source_dir, wasm_path, meta_path).
+
+    Accepts a plugin name (searched in plugins/, then the vendored example and
+    plugin sets) or a direct path to a .wasm (meta.json expected next to it).
+    source_dir is None for a direct .wasm reference.
+    """
+    as_path = Path(ref)
+    if ref.endswith(".wasm"):
+        if not as_path.exists():
+            fail(f"{ref} does not exist")
+        meta = as_path.with_name("meta.json")
+        if not meta.exists():
+            fail(f"no meta.json next to {ref}")
+        return None, as_path, meta
+    search = [PLUGINS / ref,
+              VENDOR_PLUGINS / "examples" / ref,
+              VENDOR_PLUGINS / "plugins" / ref]
+    for cand in search:
+        if (cand / "meta.json").exists():
+            return cand, DIST / f"{ref}.wasm", cand / "meta.json"
+    fail(f"no plugin {ref!r} found in plugins/ or vendor/cdc-badge-plugins "
+         f"(searched: {', '.join(str(s) for s in search)})")
+
+
+def emulator_binary() -> Path:
+    """Locate the emulator binary: $CDC_EMULATOR override, then the CMake
+    build tree (both single- and multi-config layouts)."""
+    override = os.environ.get("CDC_EMULATOR")
+    if override:
+        p = Path(override)
+        if p.exists():
+            return p
+        fail(f"$CDC_EMULATOR points to {override}, which does not exist")
+    exe = "cdc-badge-emulator" + (".exe" if sys.platform == "win32" else "")
+    build = EMULATOR_DIR / "build"
+    for cand in (build / exe, build / "Release" / exe, build / "Debug" / exe):
+        if cand.exists():
+            return cand
+    fail("emulator binary not found. Build it first:\n"
+         "  cmake -S emulator -B emulator/build && cmake --build emulator/build")
+
+
+def cmd_emulate(a: argparse.Namespace) -> None:
+    """Build (unless --no-build) and run a plugin in the off-device emulator."""
+    src_dir, wasm, meta = resolve_plugin(a.plugin)
+    if src_dir is not None and (not a.no_build or not wasm.exists()):
+        build_wasm(src_dir, src_dir.name)
+    if not wasm.exists():
+        fail(f"{wasm} does not exist (build failed or --no-build without artifact)")
+    cmd = [str(emulator_binary()), "--wasm", str(wasm), "--meta", str(meta)]
+    if a.headless:
+        cmd.append("--headless")
+    if a.keys:
+        cmd += ["--keys", a.keys]
+    if a.fail_prereq:
+        cmd += ["--fail-prereq", a.fail_prereq]
+    if a.cmd:
+        cmd += ["--cmd", a.cmd]
+    if a.msg_in:
+        cmd += ["--msg-in", a.msg_in]
+    if a.frames:
+        cmd += ["--frames", a.frames]
+    if a.snapshot:
+        cmd += ["--snapshot", a.snapshot]
+    if a.data:
+        cmd += ["--data", a.data]
+    if a.offline:
+        cmd.append("--offline")
+    if a.seconds is not None:
+        cmd += ["--seconds", str(a.seconds)]
+    if a.ticks is not None:
+        cmd += ["--ticks", str(a.ticks)]
+    print("   $", " ".join(cmd))
+    sys.exit(subprocess.run(cmd).returncode)
+
+
 def cmd_info(a: argparse.Namespace) -> None:
     upload(["--info", a.name], a.pin, a.port)
 
@@ -306,6 +408,24 @@ def build_parser() -> argparse.ArgumentParser:
     # pass --pin alongside other commands, so don't crash on it.
     sp.add_argument("--pin", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_monitor)
+
+    sp = sub.add_parser("emulate", help="run a plugin in the off-device emulator")
+    sp.add_argument("plugin", help="plugin name (plugins/, vendored examples) or a .wasm path")
+    sp.add_argument("--no-build", action="store_true", help="use the existing .wasm")
+    sp.add_argument("--headless", action="store_true", help="no window; PNG/hash output only")
+    sp.add_argument("--keys", help="scripted keypad sequence, e.g. 1,2,Y,N "
+                                   "(5! = long press, @name = EventBus event)")
+    sp.add_argument("--fail-prereq", help="force a declared prerequisite to fail "
+                                          "(tests the plugin's error path)")
+    sp.add_argument("--cmd", help="plugin command channel payload (inline or @file)")
+    sp.add_argument("--msg-in", help="inject an incoming message packet (JSON file)")
+    sp.add_argument("--frames", help="directory for per-frame PNGs")
+    sp.add_argument("--snapshot", help="compare frames against references in this directory")
+    sp.add_argument("--data", help="base dir for NVS / vFAT sandbox / SE store")
+    sp.add_argument("--offline", action="store_true", help="network calls fail; WiFi stays on")
+    sp.add_argument("--seconds", type=int, help="advance the virtual clock by N seconds")
+    sp.add_argument("--ticks", type=int, help="advance the virtual clock by N 50 ms ticks")
+    sp.set_defaults(func=cmd_emulate)
 
     for verb, fn in (("info", cmd_info), ("list", cmd_list), ("start", cmd_start),
                      ("stop", cmd_stop), ("delete", cmd_delete)):

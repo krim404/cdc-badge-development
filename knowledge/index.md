@@ -13,6 +13,13 @@ submodules under `vendor/` and stays current when you update them
 - Plugin templates: [`vendor/cdc-badge-plugins/sdk/plugin_template_rust/`](../vendor/cdc-badge-plugins/sdk/plugin_template_rust/)
 - Browser installer (webflasher): [`vendor/cdc-badge-plugins/webflasher/`](../vendor/cdc-badge-plugins/webflasher/)
 
+## Off-device emulator (run plugins without a badge)
+
+- Guide, CLI options and scope: [`emulator/README.md`](../emulator/README.md)
+- Host-API family coverage: [`emulator/tests/coverage_notes.md`](../emulator/tests/coverage_notes.md)
+- Run: `python tools/badge.py emulate <plugin>` (window) or
+  `... --headless --keys 1,2,Y,N --frames out/` (scripted, deterministic)
+
 ## Host API (the contract between plugin and firmware)
 
 - Canonical header (single source of truth - read, never edit):

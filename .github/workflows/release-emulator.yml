@@ -1,0 +1,133 @@
+name: release-emulator
+
+# Per-platform, self-contained emulator artifacts on tags (T056, SC-009/010):
+#   - Linux:   AppImage (interactive window, SDL2 bundled by linuxdeploy)
+#   - Windows: static .exe (headless build; interactive runs come from a
+#              from-source build via the badge CLI, FR-031)
+#   - macOS:   unsigned binary (headless build; self-signing tutorial in
+#              emulator/README.md - no signing/notarization on our side)
+#
+# A separate smoke job downloads each artifact on a CLEAN runner (no
+# checkout, no toolchain) and runs it, approximating the clean-machine
+# requirement (T057, SC-009).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: cdc-badge-emulator-linux-x86_64
+          - os: windows-latest
+            artifact: cdc-badge-emulator-windows-x86_64
+          - os: macos-latest
+            artifact: cdc-badge-emulator-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Allow long submodule paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Fetch the nested firmware submodules the emulator compiles
+        run: >
+          git -C vendor/cdc-badge-os submodule update --init
+          components/Adafruit-GFX components/CalEPD
+          components/wamr_runtime/wasm-micro-runtime
+
+      - name: Build the Linux AppImage and .deb
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev file
+          emulator/packaging/build_appimage.sh
+          mv cdc-badge-emulator*.AppImage ${{ matrix.artifact }}.AppImage
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ "$VERSION" = "$GITHUB_REF_NAME" ] && VERSION=0.0.0
+          emulator/packaging/build_deb.sh emulator/build-deb "$VERSION"
+
+      - name: Use MinGW GCC on Windows (the vendored firmware is GCC-only code)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'EMU_CMAKE_FLAGS=-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++' >> "$GITHUB_ENV"
+
+      - name: Build the self-contained binary (Windows/macOS, headless)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          cmake -S emulator -B emulator/build $EMU_CMAKE_FLAGS \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DEMULATOR_STATIC_RUNTIME=ON \
+            -DEMULATOR_WINDOW=OFF
+          cmake --build emulator/build --parallel --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp emulator/build/Release/cdc-badge-emulator.exe ${{ matrix.artifact }}.exe 2>/dev/null \
+              || cp emulator/build/cdc-badge-emulator.exe ${{ matrix.artifact }}.exe
+          else
+            cp emulator/build/cdc-badge-emulator ${{ matrix.artifact }}
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}*
+            cdc-badge-emulator_*.deb
+          if-no-files-found: error
+
+  smoke:
+    name: clean-machine smoke (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: cdc-badge-emulator-linux-x86_64
+          - os: windows-latest
+            artifact: cdc-badge-emulator-windows-x86_64
+          - os: macos-latest
+            artifact: cdc-badge-emulator-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Deliberately NO checkout and NO toolchain setup: the artifact must run
+      # on a stock OS (SC-009). --help exercises binary load + libc/runtime.
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+
+      - name: Run the artifact without any toolchain
+        shell: bash
+        run: |
+          f=$(ls ${{ matrix.artifact }}*)
+          chmod +x "$f" 2>/dev/null || true
+          ./"$f" --help
+
+  publish:
+    name: attach artifacts to the release
+    needs: smoke
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cdc-badge-emulator-*
+            cdc-badge-emulator_*.deb

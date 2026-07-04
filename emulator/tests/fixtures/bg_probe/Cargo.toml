@@ -1,0 +1,19 @@
+[package]
+name = "bg_probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+cdc-badge-plugin = { path = "../../../../vendor/cdc-badge-plugins/sdk/cdc-badge-plugin", features = ["panic_handler"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

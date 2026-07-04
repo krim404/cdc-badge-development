@@ -8,9 +8,11 @@ ENV BINARYEN_VERSION=version_119
 RUN rustup target add wasm32-unknown-unknown \
  && rustup component add rustfmt clippy
 
-# Python (for the badge CLI) and git (for submodules).
+# Python (for the badge CLI), git (for submodules), and the C++ toolchain
+# plus SDL2 dev headers for the off-device plugin emulator (badge emulate).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git curl ca-certificates \
+    build-essential cmake pkg-config libsdl2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Pinned Binaryen wasm-opt (x86_64 linux build).

@@ -7,7 +7,9 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
-        "ms-vscode.vscode-serial-monitor"
+        "ms-vscode.vscode-serial-monitor",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools"
       ]
     }
   }

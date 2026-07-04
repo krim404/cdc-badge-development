@@ -77,6 +77,52 @@ $ python3 tools/badge.py build starter
 
 You should see it produce `dist/starter.wasm`. 🎉 You just built embedded software.
 
+## 4b. See it run - no badge needed (the emulator)
+
+You do not need the physical badge to watch your plugin work: the repo ships an
+**emulator** that runs the plugin against the real firmware screen code, so the
+window shows exactly what the e-paper would show.
+
+One-time build (needs a C++ compiler + CMake; on Linux also `libsdl2-dev` for
+the window - the Setup task tells you what is missing):
+
+```sh
+$ cmake -S emulator -B emulator/build
+$ cmake --build emulator/build
+```
+
+Then run any plugin:
+
+```sh
+$ python3 tools/badge.py emulate starter
+```
+
+A window opens with the badge screen. Your keyboard is the keypad: **0-9**, the
+**arrow keys** (up=2, left=4, right=6, down=8), **Y/Enter** = OK, **N/Esc** =
+back; hold a key for a long press.
+
+The terminal you started it from is a **command console** at the same time
+(like the badge's serial port). Type `help` there - useful commands:
+
+| Command | What it does |
+|---------|--------------|
+| `paste <text>` | types text into an open T9 editor (no multi-tap pain) |
+| `key 5` / `keys 1,2,Y` | press keys from the console |
+| `cmd <text>` | send a command to the plugin (`plugin_on_cmd`) |
+| `event battery_low` | fire a system event the plugin can react to |
+| `screenshot shot.png` | save the current screen as an image |
+| `quit` | leave |
+
+For scripts and tests there is a headless mode that writes screen images
+instead of opening a window:
+
+```sh
+$ python3 tools/badge.py emulate starter --headless --keys 1,2,Y --frames out/
+```
+
+The full option list (snapshot testing, fake network offline mode, forcing
+prerequisite failures) is in [`emulator/README.md`](./emulator/README.md).
+
 ## 5. Make your own plugin
 
 ### The classical way

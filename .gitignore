@@ -9,6 +9,9 @@
 /dist
 /build
 /_site
+/emulator/build*
+*.AppImage
+*.deb
 
 # --- Generated skill mirror ---
 # The cdc-badge-plugin-dev skill is committed once under .claude/skills and

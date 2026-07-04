@@ -1,0 +1,21 @@
+{
+  "id": "bg_probe",
+  "version": "0.1.0",
+  "author": "emulator-tests",
+  "icon": "info",
+  "host_api_level_min": "0.7",
+  "linear_memory_kb": 64,
+  "i18n": {
+    "default_language": "en",
+    "meta": {
+      "name": { "en": "Background Probe" },
+      "description": { "en": "Emulator test fixture: counts ticks in NVS while resident in the background." }
+    },
+    "strings": { "quick": { "en": "BG Probe ping" } }
+  },
+  "capabilities": {
+    "background": true,
+    "nvs_namespace": "plg_bg_probe"
+  },
+  "prerequisites": {}
+}

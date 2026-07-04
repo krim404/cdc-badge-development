@@ -15,9 +15,17 @@ installation, opinionated defaults, and an editor that surfaces the actions.
 Python per OS.
 
 ### II. Plugin Scope Only
-This repo builds plugins, not firmware. No firmware (C++/ESP-IDF) build is in
-scope. Upstream firmware and SDK are consumed as updatable git submodules;
-`host_api.h` is canonical upstream and is never forked or edited here.
+This repo builds plugins, not firmware. No firmware image (ESP-IDF target
+build) is in scope. Upstream firmware and SDK are consumed as updatable git
+submodules; `host_api.h` is canonical upstream and is never forked or edited
+here.
+
+**Permitted exception - the off-device emulator** (`emulator/`): a host-only
+CMake target MAY compile selected vendored firmware sources read-only (drawing
+stack, view stack, plugin-manager host-API bodies, WAMR) so plugins can run and
+be regression-tested without hardware. The vendored sources are consumed,
+never patched; nothing here produces or modifies firmware. Anything beyond
+that consumption (forking, editing, flashing firmware) stays out of scope.
 
 ### III. Cross-Platform, Windows-First-Class
 Windows is the majority target and is verified by a CI matrix (windows/macos/
@@ -48,4 +56,4 @@ This constitution governs the onboarding repo. Documentation describes the
 current state only (no history, rationale, or migration notes). Changes keep the
 host API consumed read-only and the cross-platform CI green.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-06-19
+**Version**: 1.1.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-07-03

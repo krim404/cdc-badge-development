@@ -1,12 +1,45 @@
 stages:
+  - test
   - push
 
 variables:
   HARBOR_HOST: registry.krim.dev
   IMAGE_NAME: $HARBOR_HOST/library/$CI_PROJECT_NAME
+  GIT_SUBMODULE_STRATEGY: normal
+
+# Mirrors the GitHub emulator job: build the off-device emulator (static
+# runtime, headless), run its unit + snapshot tests, run the whole example
+# set headlessly, and upload the self-contained binary as an artifact.
+emulator:
+  stage: test
+  image: rust:1-bookworm
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends
+        build-essential cmake python3 python3-venv git ca-certificates curl
+    - git -C vendor/cdc-badge-os submodule update --init
+        components/Adafruit-GFX components/CalEPD
+        components/wamr_runtime/wasm-micro-runtime
+    - python3 scripts/setup.py
+  script:
+    - cmake -S emulator -B emulator/build
+        -DCMAKE_BUILD_TYPE=Release
+        -DEMULATOR_STATIC_RUNTIME=ON
+        -DEMULATOR_WINDOW=OFF
+    - cmake --build emulator/build --parallel
+    - python3 tools/badge.py build canvas_demo
+    - python3 tools/badge.py build mini_messenger
+    - ctest --test-dir emulator/build --output-on-failure
+    - python3 emulator/tests/run_examples.py
+  artifacts:
+    name: cdc-badge-emulator-linux-x86_64
+    paths:
+      - emulator/build/cdc-badge-emulator
+    expire_in: 4 weeks
+  rules:
+    - if: '$CI_COMMIT_BRANCH || $CI_MERGE_REQUEST_ID || $CI_COMMIT_TAG'
 
 # Builds the dev-container image and pushes it to registry.krim.dev. Runs only
-# on the default branch and only when the Harbor credentials are configured.
+# on tags and only when the Harbor credentials are configured.
 push:
   stage: push
   image: docker:27

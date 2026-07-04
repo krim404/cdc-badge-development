@@ -22,9 +22,17 @@ task / `python scripts/setup.py` provisions everything first.
 | New plugin | `python tools/badge.py new <name>` |
 | Build | `python tools/badge.py build <name>` |
 | Test (host) | `python tools/badge.py test <name>` |
+| Run off-device | `python tools/badge.py emulate <name>` |
 | Flash + run + logs | `python tools/badge.py flash <name> --start --monitor` |
 | Serial log | `python tools/badge.py monitor` |
 | Manage | `python tools/badge.py list|start|stop|delete ...` |
+
+`badge emulate` runs a plugin **without hardware** against the real firmware
+drawing stack and host API (same WAMR runtime, pixel-identical frames). Build
+the emulator once (`cmake -S emulator -B emulator/build && cmake --build
+emulator/build`), then iterate with `--headless --keys 1,2,Y,N --frames out/`
+for scripted, deterministic runs or `--snapshot` for regression checks. See
+`emulator/README.md` for the full option table and what is (not) emulated.
 
 Flashing and the serial monitor run **on the host** over USB (115200). If the
 host cannot reach USB (e.g. a container), use the WebSerial webflasher in
