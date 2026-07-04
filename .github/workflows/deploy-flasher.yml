@@ -48,6 +48,20 @@ jobs:
         with:
           enablement: true
 
+      # Re-running this workflow keeps the previous attempt's "github-pages"
+      # artifact around, and deploy-pages@v4 aborts when it finds two of them.
+      # Drop any leftover copy so re-runs deploy cleanly.
+      - name: Remove stale Pages artifacts from earlier attempts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+            --jq '.artifacts[] | select(.name == "github-pages") | .id' |
+          while read -r id; do
+            echo "deleting stale github-pages artifact $id"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id"
+          done
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

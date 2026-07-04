@@ -34,9 +34,12 @@ emulator/build`), then iterate with `--headless --keys 1,2,Y,N --frames out/`
 for scripted, deterministic runs or `--snapshot` for regression checks. See
 `emulator/README.md` for the full option table and what is (not) emulated.
 
-Flashing and the serial monitor run **on the host** over USB (115200). If the
-host cannot reach USB (e.g. a container), use the WebSerial webflasher in
-`vendor/cdc-badge-plugins/webflasher` instead. Do not assume USB inside a container.
+Flashing and the serial monitor run **on the host** over USB (115200). WebSerial
+is not a way around USB - it still needs the badge plugged in, just accessed by a
+browser instead of the CLI. So if you are in a sandbox without USB passthrough
+(e.g. a container), you cannot flash from there; the human runs the WebSerial
+webflasher in `vendor/cdc-badge-plugins/webflasher` in a browser on the physical
+machine the badge is plugged into. Do not assume USB inside a container.
 
 ## How to work here (apply when generating or reviewing code)
 

@@ -98,8 +98,11 @@ python tools/badge.py monitor [--seconds N] [--until TEXT]   # read the serial l
 python tools/badge.py list|start <id>|stop|delete <id>       # manage plugins on the device
 ```
 
-No host USB (e.g. a container)? Use the WebSerial webflasher in
-`vendor/cdc-badge-plugins/webflasher`. If the badge needs a PIN, add `--pin <pin>`
+In a sandbox without USB passthrough (e.g. a container) you cannot flash from
+there. WebSerial does not avoid USB - it still needs the badge plugged in, just
+driven by a browser instead of the CLI. So the human opens the WebSerial
+webflasher in `vendor/cdc-badge-plugins/webflasher` in a browser on the physical
+machine the badge is plugged into. If the badge needs a PIN, add `--pin <pin>`
 (factory default `123456`); if it is rejected, ask the user for the PIN - never
 try other PINs, repeated wrong attempts lock the badge.
 

@@ -46,9 +46,7 @@ python3 tools/badge.py build hello        # compile to .wasm
 python3 tools/badge.py flash hello --start --monitor   # upload, run, watch (Ctrl-C to stop)
 ```
 
-Your code lives in **`plugins/hello/src/lib.rs`**. If your computer can't reach
-the badge over USB, use the browser installer (WebSerial) at
-<https://krim404.github.io/cdc-badge-plugins/> instead.
+Your code lives in **`plugins/hello/src/lib.rs`**.
 
 ### No badge at hand? Use the emulator
 
