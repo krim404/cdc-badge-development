@@ -1,9 +1,11 @@
 #include "EmulatorCore.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #include "backends/HostDisplay.h"
@@ -49,6 +51,13 @@ void emulatorSetActiveBinary(const std::string& id, const std::string& wasmPath,
 
 extern "C" void plg_msg_pump(void);
 extern "C" void plg_msg_on_unload(void* plugin);
+extern "C" void plg_ext_feature_pump(void);
+extern "C" void plg_ext_feature_on_unload(void* plugin);
+extern "C" void plg_net_pump(void);
+extern "C" void plg_net_on_unload(void* plugin);
+extern "C" void plg_surface_on_unload(void* plugin);
+extern "C" void plg_http_on_unload(void* plugin);
+extern "C" void plg_socket_on_unload(void* plugin);
 
 namespace emu {
 
@@ -281,7 +290,16 @@ void EmulatorCore::unloadPluginInstance()
     // registry holds a dangling pointer (the firmware's teardownPlugin does
     // the same).
     cdc::plugin_manager::clearLockscreenRegistrationFor(plugin_.get());
+    // Same hooks and order as the firmware's teardownPlugin (minus the ble
+    // and gpio sources the emulator does not compile). http/socket matter
+    // since simulateDeepSleep(): without them adopted sockets and open HTTP
+    // requests leak their fds and slot-pool entries across reload cycles.
     plg_msg_on_unload(plugin_.get());
+    plg_ext_feature_on_unload(plugin_.get());
+    plg_surface_on_unload(plugin_.get());
+    plg_net_on_unload(plugin_.get());
+    plg_http_on_unload(plugin_.get());
+    plg_socket_on_unload(plugin_.get());
     plg_set_active_plugin(nullptr);
     cdc::plugin_manager::emulatorSetActivePlugin(nullptr);
     plugin_.reset();
@@ -542,6 +560,7 @@ bool EmulatorCore::injectEvent(const std::string& spec)
         {"sleep_incoming", EventType::SYSTEM_SLEEP_INCOMING},
         {"ble_connected", EventType::BLE_CONNECTED},
         {"ble_disconnected", EventType::BLE_DISCONNECTED},
+        {"display_refresh", EventType::DISPLAY_REFRESH},  // value: 1 begin, 0 end
     };
 
     std::string name = spec;
@@ -598,6 +617,8 @@ void EmulatorCore::advance(int64_t ms)
                 (void)plugin_->callI("plugin_on_tick", {lo, hi});
             }
             plg_msg_pump();
+            plg_ext_feature_pump();
+            plg_net_pump();
             auto& stack = cdc::ui::ViewStack::instance();
             stack.dispatchTick(static_cast<uint32_t>(now));
             // Same as AppUi::ui_process: fire the registered inactivity
@@ -611,6 +632,9 @@ void EmulatorCore::advance(int64_t ms)
     }
     processPendingLock();
     renderIfNeeded();
+    // Deliver a frame that was coalesced during the emulated panel-busy
+    // window (realtime refresh mode; no-op otherwise).
+    HostDisplay::instance().pump();
 }
 
 bool EmulatorCore::injectMessage(const std::string& file)
@@ -665,9 +689,76 @@ int EmulatorCore::runScripted()
     if (options_.run_seconds > 0) {
         advance(options_.run_seconds * 1000);
     }
+    if (options_.serve_seconds > 0) {
+        serveWallclock(options_.serve_seconds);
+    }
     renderIfNeeded(true);
     shutdown();
     return 0;
+}
+
+int EmulatorCore::serveWallclock(int64_t seconds)
+{
+    using clk = std::chrono::steady_clock;
+    auto& vclock = VirtualClock::instance();
+    const auto deadline = clk::now() + std::chrono::seconds(seconds);
+    const auto midpoint = clk::now() + std::chrono::seconds(seconds / 2);
+    bool sleep_done = false;
+    std::printf("[emu] serving in real time for %llds\n", static_cast<long long>(seconds));
+
+    while (clk::now() < deadline) {
+        // Optional mid-run sleep simulation, once.
+        if (!sleep_done && clk::now() >= midpoint &&
+            (options_.sim_light_sleep || options_.sim_deep_sleep)) {
+            sleep_done = true;
+            if (options_.sim_deep_sleep) simulateDeepSleep();
+            else simulateLightSleep();
+        }
+
+        vclock.advanceMs(kTickIntervalMs);
+        const uint64_t uptime = static_cast<uint64_t>(vclock.nowMs());
+        if (plugin_) {
+            (void)plugin_->callI("plugin_on_tick",
+                                 {static_cast<int32_t>(uptime & 0xFFFFFFFFu),
+                                  static_cast<int32_t>(uptime >> 32)});
+        }
+        plg_msg_pump();
+        plg_ext_feature_pump();
+        plg_net_pump();
+        cdc::ui::ViewStack::instance().dispatchTick(static_cast<uint32_t>(uptime));
+        cdc::core::EventBus::instance().process();
+        processPendingLock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(kTickIntervalMs));
+    }
+    return 0;
+}
+
+void EmulatorCore::simulateLightSleep()
+{
+    // The badge pauses tasks during light sleep and resumes on wake. A non-
+    // blocking listener simply keeps accepting in the pump afterward; this
+    // marks the boundary and lets the plugin observe a wake tick.
+    std::printf("[emu] --- light sleep --- (listener should survive)\n");
+    if (plugin_) {
+        const uint64_t up = static_cast<uint64_t>(VirtualClock::instance().nowMs());
+        (void)plugin_->callI("plugin_on_tick",
+                             {static_cast<int32_t>(up & 0xFFFFFFFFu),
+                              static_cast<int32_t>(up >> 32)});
+    }
+    plg_net_pump();
+}
+
+void EmulatorCore::simulateDeepSleep()
+{
+    // Deep sleep is a reboot: tear the plugin down and reload it. autoload +
+    // set_resident(true) in plugin_init bring a resident service back up.
+    std::printf("[emu] --- deep sleep (reboot) --- reloading plugin\n");
+    unloadPluginInstance();
+    if (load() && start()) {
+        std::printf("[emu] plugin reloaded after deep sleep\n");
+    } else {
+        std::printf("[emu] plugin failed to reload after deep sleep\n");
+    }
 }
 
 void EmulatorCore::shutdown()

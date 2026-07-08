@@ -77,8 +77,14 @@ The mistakes that cost real time on this platform. Apply these proactively.
   If you don't handle the back key (pop the view), the user is trapped. Always
   provide an exit.
 - **Pop your own modals/views on exit.** Leaving views on the stack when the plugin
-  is unloaded has historically caused use-after-free style crashes. See the cleanup
-  checklist in `capabilities-and-lifecycle.md`.
+  is unloaded has historically caused use-after-free style crashes. Pop every view
+  as soon as it is no longer needed - do not let stale views pile up on the stack.
+  See the cleanup checklist in `capabilities-and-lifecycle.md`.
+- **Never push a view per animation frame.** An animation is ONE canvas pushed in
+  `plugin_on_enter` and reused for every frame: update via canvas elements
+  (`canvas::elem_move/set_offset/show/remove` + `commit(false)`, see `canvas.md`)
+  or clear+redraw the same view. Pushing a fresh view per frame floods the view
+  stack, forces full repaints and traps the user behind dozens of back-presses.
 - **Don't double-pop a host dialog.** `push_confirm`, the slider, T9/password, and the
   date/time/PIN/colour pickers **pop themselves before the action fires** - calling
   `ui::pop()` again in their handler pops the view underneath. By contrast a list or

@@ -22,6 +22,7 @@
 #include <io.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdint>
 
 /* windows.h leaks an ERROR object-like macro (wingdi) that would destroy
@@ -102,6 +103,32 @@ static inline int setsockopt(int fd, int level, int optname, const void* optval,
     return ::setsockopt(static_cast<SOCKET>(fd), level, optname,
                         static_cast<const char*>(optval),
                         static_cast<int>(optlen));
+}
+
+/* accept() wrapper: the reused host_api_net.cpp checks errno for
+ * EAGAIN/EWOULDBLOCK after a non-blocking accept, but Winsock reports
+ * WSAEWOULDBLOCK via WSAGetLastError() and leaves errno alone - without the
+ * mapping every empty pump tick looked like a hard error and the listener
+ * was closed and reopened every 50 ms, dropping backlogged connections. */
+static inline int accept(int fd, struct sockaddr* addr, socklen_t* addrlen)
+{
+    int len = addrlen ? static_cast<int>(*addrlen) : 0;
+    const SOCKET s = ::accept(static_cast<SOCKET>(fd), addr,
+                              addrlen ? &len : nullptr);
+    if (addrlen) {
+        *addrlen = static_cast<socklen_t>(len);
+    }
+    if (s == INVALID_SOCKET) {
+        errno = (WSAGetLastError() == WSAEWOULDBLOCK) ? EAGAIN : EIO;
+        return -1;
+    }
+    if (s > static_cast<SOCKET>(INT32_MAX)) {
+        /* The int-based POSIX call sites cannot carry a handle this large. */
+        closesocket(s);
+        errno = EMFILE;
+        return -1;
+    }
+    return static_cast<int>(s);
 }
 
 /* In this translation-unit scope `close` only ever means "close a socket". */

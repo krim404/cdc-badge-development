@@ -50,6 +50,8 @@ public:
     bool isBatteryPresent() const override { return true; }
     void setChargingEnabled(bool enabled) override { (void)enabled; }
     void enterShipMode() override {}
+    void setPreShipModeCallback(cdc::hal::IPowerManager::PreShipModeCallback cb) override
+    { (void)cb; }
     void update() override {}
     void refresh() override {}
     void prepareForSleep() override {}

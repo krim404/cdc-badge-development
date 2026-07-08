@@ -13,6 +13,8 @@
 #include <io.h>
 #define EMU_ISATTY() _isatty(_fileno(stdin))
 #else
+#include <cerrno>
+#include <poll.h>
 #include <unistd.h>
 #define EMU_ISATTY() isatty(STDIN_FILENO)
 #endif
@@ -24,6 +26,7 @@
 #include "../backends/VirtualClock.h"
 #include "IFrontend.h"
 
+#include "cdc_core/Cp437.h"
 #include "cdc_ui/ViewStack.h"
 #include "cdc_views/T9InputView.h"
 #include "plugin_manager/PluginManifest.h"
@@ -86,7 +89,11 @@ bool pasteIntoEditor(FILE* out, EmulatorCore& core, const std::string& text)
         fprintf(out, "error: no T9/password editor is open\n");
         return false;
     }
-    const uint16_t appended = t9->appendRaw(text.c_str());
+    // The host terminal delivers UTF-8, but the editor buffer and the display
+    // pipeline are CP437. On the badge the serial reader converts each line
+    // before dispatch (SerialCmd); mirror that here for the paste payload.
+    const std::string cp437 = cdc::core::cp437::fromUtf8(text.c_str());
+    const uint16_t appended = t9->appendRaw(cp437.c_str());
     t9->markDirty();
     core.renderIfNeeded();
     fprintf(out, "pasted %u byte(s)\n", appended);
@@ -119,6 +126,7 @@ struct Console::Impl {
     std::mutex              mutex;
     std::deque<std::string> lines;
     std::atomic<bool>       eof{false};
+    std::atomic<bool>       stop{false};
     bool                    started = false;
 };
 
@@ -129,10 +137,21 @@ Console::Console(FILE* out) : impl_(new Impl())
 
 Console::~Console()
 {
+#ifdef _WIN32
     // The reader thread blocks in getline(); it ends with the process.
     if (impl_->started) {
         impl_->reader.detach();
     }
+#else
+    // The poll()-based reader notices the stop flag within one timeout slice
+    // and can be joined. Never detach a thread blocked in C-stdio input: it
+    // holds the stdin FILE lock, and glibc's exit() -> _IO_flush_all() then
+    // deadlocks on it (emulator kept running after the window was closed).
+    impl_->stop = true;
+    if (impl_->started && impl_->reader.joinable()) {
+        impl_->reader.join();
+    }
+#endif
 }
 
 bool Console::stdinIsTty()
@@ -150,6 +169,7 @@ void Console::start()
     fprintf(out, "emulator console ready - type 'help' for commands\n");
     fflush(out);
     Impl* impl = impl_.get();
+#ifdef _WIN32
     impl_->reader = std::thread([impl]() {
         std::string line;
         while (std::getline(std::cin, line)) {
@@ -158,6 +178,48 @@ void Console::start()
         }
         impl->eof = true;
     });
+#else
+    // Raw poll()/read() reader: unlike getline(std::cin) it never sits inside
+    // C stdio holding the stdin FILE lock, so process teardown cannot deadlock
+    // and the thread can be stopped and joined (see ~Console).
+    impl_->reader = std::thread([impl]() {
+        std::string acc;
+        char        buf[256];
+        while (!impl->stop) {
+            struct pollfd pfd = {STDIN_FILENO, POLLIN, 0};
+            const int     r = ::poll(&pfd, 1, 200);
+            if (r < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                break;
+            }
+            if (r == 0) {
+                continue;
+            }
+            const ssize_t n = ::read(STDIN_FILENO, buf, sizeof(buf));
+            if (n <= 0) {
+                break;  // EOF or error
+            }
+            acc.append(buf, static_cast<size_t>(n));
+            size_t nl;
+            while ((nl = acc.find('\n')) != std::string::npos) {
+                std::string line = acc.substr(0, nl);
+                if (!line.empty() && line.back() == '\r') {
+                    line.pop_back();
+                }
+                acc.erase(0, nl + 1);
+                std::lock_guard<std::mutex> lock(impl->mutex);
+                impl->lines.push_back(std::move(line));
+            }
+        }
+        if (!impl->stop && !acc.empty()) {
+            std::lock_guard<std::mutex> lock(impl->mutex);
+            impl->lines.push_back(std::move(acc));
+        }
+        impl->eof = true;
+    });
+#endif
 }
 
 bool Console::poll(EmulatorCore& core)

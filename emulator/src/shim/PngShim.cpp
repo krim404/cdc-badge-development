@@ -1,6 +1,6 @@
 /**
  * \file PngShim.cpp
- * \brief png_image simplified-API subset over stb_image (see shim/png.h).
+ * \brief png_image simplified-API subset over LodePNG (see shim/png.h).
  *
  * Supports exactly what ImageDecoder.cpp asks for: begin-read from memory,
  * finish-read into an 8-bit GRAY buffer with alpha composited over a solid
@@ -10,10 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ONLY_PNG
-#define STBI_NO_STDIO
-#include "stb_image.h"
+#include "lodepng.h"
 
 extern "C" {
 #include "png.h"
@@ -22,9 +19,9 @@ extern "C" {
 namespace {
 
 struct Decoded {
-    uint8_t* rgba = nullptr;
-    int      width = 0;
-    int      height = 0;
+    uint8_t*  rgba = nullptr;
+    unsigned width = 0;
+    unsigned height = 0;
 };
 
 }  // namespace
@@ -37,14 +34,14 @@ int png_image_begin_read_from_memory(png_image* image, const void* memory,
     if (!image || !memory || image->version != PNG_IMAGE_VERSION) {
         return 0;
     }
-    int width = 0;
-    int height = 0;
-    int comp = 0;
+    unsigned width = 0;
+    unsigned height = 0;
+    uint8_t* rgba = nullptr;
     // Decode fully here; the simplified API only exposes begin/finish anyway.
-    uint8_t* rgba = stbi_load_from_memory(static_cast<const stbi_uc*>(memory),
-                                          static_cast<int>(size), &width,
-                                          &height, &comp, 4);
-    if (!rgba) {
+    const unsigned error = lodepng_decode32(&rgba, &width, &height,
+                                            static_cast<const uint8_t*>(memory),
+                                            size);
+    if (error != 0 || !rgba) {
         return 0;
     }
     auto* decoded = new Decoded{rgba, width, height};
@@ -68,8 +65,8 @@ int png_image_finish_read(png_image* image, const png_color* background,
     const size_t  stride = row_stride > 0 ? static_cast<size_t>(row_stride)
                                           : static_cast<size_t>(decoded->width);
     auto* out = static_cast<uint8_t*>(buffer);
-    for (int y = 0; y < decoded->height; ++y) {
-        for (int x = 0; x < decoded->width; ++x) {
+    for (unsigned y = 0; y < decoded->height; ++y) {
+        for (unsigned x = 0; x < decoded->width; ++x) {
             const uint8_t* px = decoded->rgba + (static_cast<size_t>(y) * decoded->width + x) * 4;
             const unsigned alpha = px[3];
             const unsigned r = (px[0] * alpha + bgR * (255 - alpha)) / 255;
@@ -87,7 +84,7 @@ void png_image_free(png_image* image)
 {
     if (image && image->opaque) {
         auto* decoded = static_cast<Decoded*>(image->opaque);
-        stbi_image_free(decoded->rgba);
+        std::free(decoded->rgba);
         delete decoded;
         image->opaque = nullptr;
     }

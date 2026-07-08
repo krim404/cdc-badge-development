@@ -60,6 +60,10 @@ void usage(const char* argv0)
             "  --offline         HTTP/socket fail cleanly; WiFi still reports on\n"
             "  --seconds <n>     advance the virtual clock by n seconds\n"
             "  --ticks <n>       advance the virtual clock by n 50 ms plugin ticks\n"
+            "  --serve <n>       run headless in real time for n seconds\n"
+            "                    (network listeners stay reachable, e.g. webserver)\n"
+            "  --sim-light-sleep simulate a light-sleep/wake cycle, then continue\n"
+            "  --sim-deep-sleep  simulate a deep-sleep reboot (plugin unload+reload)\n"
             "  --repl            force the interactive stdin console\n"
             "                    (default on when stdin is a TTY and the run is\n"
             "                    not scripted; type 'help' once running)\n",
@@ -146,6 +150,12 @@ int main(int argc, char** argv)
             options.run_seconds = atoll(next("--seconds"));
         } else if (arg == "--ticks") {
             options.run_ticks = atoll(next("--ticks"));
+        } else if (arg == "--serve") {
+            options.serve_seconds = atoll(next("--serve"));
+        } else if (arg == "--sim-light-sleep") {
+            options.sim_light_sleep = true;
+        } else if (arg == "--sim-deep-sleep") {
+            options.sim_deep_sleep = true;
         } else if (arg == "--help" || arg == "-h") {
             usage(argv[0]);
             return 0;
@@ -162,7 +172,8 @@ int main(int argc, char** argv)
 
     // Scripted inputs imply a deterministic, non-interactive run.
     const bool scripted = !options.keys.empty() || options.run_seconds > 0 ||
-                          options.run_ticks > 0 || !options.snapshot_dir.empty();
+                          options.run_ticks > 0 || options.serve_seconds > 0 ||
+                          !options.snapshot_dir.empty();
     // The stdin console: forced via --repl, default-on for interactive runs
     // launched from a terminal (never during scripted/snapshot runs, which
     // must stay deterministic).
@@ -184,6 +195,7 @@ int main(int argc, char** argv)
                     window.onFrame(frame, len);
                 });
             emu::HostRtc::instance().useHostTime();
+            emu::HostDisplay::instance().setRealtimeRefresh(true);
             if (!core.load()) {
                 return 2;
             }
@@ -217,6 +229,7 @@ int main(int argc, char** argv)
         // Headless-interactive: the console drives the session; wall-clock
         // time feeds the same deterministic advance machinery as the window.
         emu::HostRtc::instance().useHostTime();
+        emu::HostDisplay::instance().setRealtimeRefresh(true);
         if (!core.start()) {
             return 3;
         }

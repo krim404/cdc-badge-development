@@ -2,10 +2,15 @@ name: release-emulator
 
 # Per-platform, self-contained emulator artifacts on tags (T056, SC-009/010):
 #   - Linux:   AppImage (interactive window, SDL2 bundled by linuxdeploy)
-#   - Windows: static .exe (headless build; interactive runs come from a
-#              from-source build via the badge CLI, FR-031)
-#   - macOS:   unsigned binary (headless build; self-signing tutorial in
-#              emulator/README.md - no signing/notarization on our side)
+#   - Windows: .exe plus a bundled SDL2.dll (interactive window, MinGW build)
+#   - macOS:   self-contained binary with SDL2 linked statically, ad-hoc
+#              signed (interactive window; self-signing notes in
+#              emulator/README.md - no notarization on our side)
+#
+# The window frontend (SDL2) is what a downloaded artifact is for; headless is
+# only useful for the test CIs. macOS links SDL2 statically (a single ad-hoc
+# signed binary avoids the dylib library-validation hang a provenanced,
+# CI-built process hits); Windows ships SDL2.dll next to the .exe.
 #
 # A separate smoke job downloads each artifact on a CLEAN runner (no
 # checkout, no toolchain) and runs it, approximating the clean-machine
@@ -57,32 +62,75 @@ jobs:
           [ "$VERSION" = "$GITHUB_REF_NAME" ] && VERSION=0.0.0
           emulator/packaging/build_deb.sh emulator/build-deb "$VERSION"
 
-      - name: Use MinGW GCC on Windows (the vendored firmware is GCC-only code)
+      - name: Build the interactive Windows binary (MinGW + bundled SDL2.dll)
         if: runner.os == 'Windows'
         shell: bash
-        run: echo 'EMU_CMAKE_FLAGS=-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++' >> "$GITHUB_ENV"
-
-      - name: Build the self-contained binary (Windows/macOS, headless)
-        if: runner.os != 'Linux'
-        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cmake -S emulator -B emulator/build $EMU_CMAKE_FLAGS \
+          set -euo pipefail
+          # SDL2 (not SDL3) MinGW development libraries. 'releases/latest' now
+          # points at SDL3, so pick the newest release-2.x tag explicitly. The
+          # vendored firmware is GCC-only, so we stay on MinGW (Ninja + gcc).
+          tag=$(gh api 'repos/libsdl-org/SDL/releases?per_page=100' \
+            --jq '[.[] | select(.tag_name|test("^release-2\\."))][0].tag_name')
+          ver=${tag#release-}
+          gh release download "$tag" --repo libsdl-org/SDL \
+            --pattern "SDL2-devel-${ver}-mingw.zip" --dir .
+          7z x "SDL2-devel-${ver}-mingw.zip" -osdl2 >/dev/null
+          sdlroot="$PWD/sdl2/SDL2-${ver}/x86_64-w64-mingw32"
+          cmake -S emulator -B emulator/build -G Ninja \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_BUILD_TYPE=Release \
             -DEMULATOR_STATIC_RUNTIME=ON \
-            -DEMULATOR_WINDOW=OFF
-          cmake --build emulator/build --parallel --config Release
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            cp emulator/build/Release/cdc-badge-emulator.exe ${{ matrix.artifact }}.exe 2>/dev/null \
-              || cp emulator/build/cdc-badge-emulator.exe ${{ matrix.artifact }}.exe
-          else
-            cp emulator/build/cdc-badge-emulator ${{ matrix.artifact }}
-          fi
+            -DEMULATOR_WINDOW=ON \
+            -DCMAKE_PREFIX_PATH="$sdlroot"
+          cmake --build emulator/build --parallel
+          cp emulator/build/cdc-badge-emulator.exe ${{ matrix.artifact }}.exe
+          # Bundle SDL2.dll next to the .exe (Windows searches the exe's dir).
+          cp "$sdlroot/bin/SDL2.dll" SDL2.dll
+
+      - name: Build the interactive macOS binary (static SDL2, self-contained)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Homebrew's 'sdl2' is now sdl2-compat (an SDL2 API shim over SDL3)
+          # that ships no static library and drags in a libSDL3 dylib, so a
+          # brew build cannot be self-contained. Build real SDL2 (release-2.x)
+          # from source as a static library instead: the emulator then links
+          # it in and needs no external dylib, so a single ad-hoc signed
+          # binary runs on a stock machine with no library-validation hang.
+          tag=$(gh api 'repos/libsdl-org/SDL/releases?per_page=100' \
+            --jq '[.[] | select(.tag_name|test("^release-2\\."))][0].tag_name')
+          ver=${tag#release-}
+          gh release download "$tag" --repo libsdl-org/SDL \
+            --pattern "SDL2-${ver}.tar.gz" --dir .
+          tar xf "SDL2-${ver}.tar.gz"
+          cmake -S "SDL2-${ver}" -B sdl2-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-prefix"
+          cmake --build sdl2-build --parallel
+          cmake --install sdl2-build
+          cmake -S emulator -B emulator/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DEMULATOR_STATIC_RUNTIME=ON \
+            -DEMULATOR_WINDOW=ON \
+            -DCMAKE_PREFIX_PATH="$PWD/sdl2-prefix"
+          cmake --build emulator/build --parallel
+          cp emulator/build/cdc-badge-emulator ${{ matrix.artifact }}
+          # arm64 refuses to exec an unsigned binary; ad-hoc is enough here.
+          codesign --force -s - ${{ matrix.artifact }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             ${{ matrix.artifact }}*
+            SDL2.dll
             cdc-badge-emulator_*.deb
           if-no-files-found: error
 
@@ -130,4 +178,5 @@ jobs:
         with:
           files: |
             cdc-badge-emulator-*
+            SDL2.dll
             cdc-badge-emulator_*.deb

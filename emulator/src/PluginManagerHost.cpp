@@ -59,6 +59,46 @@ bool PluginManager::messageTypeInstalled(const char* mime) const
     return false;
 }
 
+bool PluginManager::featureInstalled(const char* feature) const
+{
+    return !featureProviderId(feature).empty();
+}
+
+std::string PluginManager::featureProviderId(const char* feature) const
+{
+    // Single-plugin emulator: the loaded plugin is the only candidate
+    // provider. Cross-plugin feature calls need the badge.
+    if (!feature || !g_active) {
+        return {};
+    }
+    for (const auto& name : g_active->manifest().capabilities.provides) {
+        if (name == feature) {
+            return g_active->id();
+        }
+    }
+    return {};
+}
+
+StartResult PluginManager::startPlugin(const std::string& id)
+{
+    // The ext-feature pump "switches the provider to the foreground"; in the
+    // emulator the provider can only be the already-running session plugin.
+    if (g_active && g_active->id() == id) {
+        return StartResult::Ok;
+    }
+    return StartResult::ManifestMissing;
+}
+
+std::string PluginManager::activePluginId() const
+{
+    return g_active ? g_active->id() : std::string{};
+}
+
+bool PluginManager::isLoaded(const std::string& id) const
+{
+    return g_active && g_active->id() == id;
+}
+
 bool PluginManager::activateForMessageType(const char* mime)
 {
     if (!messageTypeInstalled(mime)) {

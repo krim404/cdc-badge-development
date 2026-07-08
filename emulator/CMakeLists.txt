@@ -66,7 +66,37 @@ FetchContent_Declare(stb
     GIT_TAG        31c1ad37456438565541f4919958214b6e762fb4
     GIT_SHALLOW    FALSE)
 
-FetchContent_MakeAvailable(mbedtls cjson monocypher stb)
+# LodePNG - compact PNG decoder for the host png_image shim.
+FetchContent_Declare(lodepng
+    GIT_REPOSITORY https://github.com/lvandeve/lodepng.git
+    GIT_TAG        ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+    GIT_SHALLOW    FALSE)
+
+# espressif/qrcode 0.2.0 - the QR engine behind host_qr_* / QrRaster (same
+# pinned commit as the firmware's managed component).
+FetchContent_Declare(idf_extra
+    GIT_REPOSITORY https://github.com/espressif/idf-extra-components.git
+    GIT_TAG        3117b1e6806738c0271bbd18df17f6d74ec66452
+    GIT_SHALLOW    FALSE)
+
+FetchContent_MakeAvailable(mbedtls cjson monocypher stb lodepng idf_extra)
+
+add_library(lodepng_static STATIC ${lodepng_SOURCE_DIR}/lodepng.cpp)
+target_include_directories(lodepng_static PUBLIC ${lodepng_SOURCE_DIR})
+if(NOT MSVC)
+    set_source_files_properties(${lodepng_SOURCE_DIR}/lodepng.cpp PROPERTIES COMPILE_OPTIONS "-w")
+endif()
+
+add_library(esp_qrcode STATIC
+    ${idf_extra_SOURCE_DIR}/qrcode/esp_qrcode_main.c
+    ${idf_extra_SOURCE_DIR}/qrcode/esp_qrcode_wrapper.c
+    ${idf_extra_SOURCE_DIR}/qrcode/qrcodegen.c)
+target_include_directories(esp_qrcode PUBLIC
+    ${idf_extra_SOURCE_DIR}/qrcode/include
+    ${idf_extra_SOURCE_DIR}/qrcode)
+target_include_directories(esp_qrcode PRIVATE ${SHIM})
+# On-device the IDF log header chain pulls in stdlib.h; the shim's does not.
+target_compile_options(esp_qrcode PRIVATE -include stdlib.h)
 
 add_library(monocypher_ed25519 STATIC
     ${monocypher_SOURCE_DIR}/src/monocypher.c
@@ -155,6 +185,7 @@ set(VENDOR_SOURCES
     # UI framework + views (the plugin-visible UI surface)
     ${VENDOR}/cdc_ui/src/ViewStack.cpp
     ${VENDOR}/cdc_ui/src/I18n.cpp
+    ${VENDOR}/cdc_views/src/CanvasAnim.cpp
     ${VENDOR}/cdc_views/src/CanvasView.cpp
     ${VENDOR}/cdc_views/src/ColorPickerView.cpp
     ${VENDOR}/cdc_views/src/ConfirmView.cpp
@@ -175,10 +206,15 @@ set(VENDOR_SOURCES
     ${VENDOR}/cdc_views/src/T9InputView.cpp
     ${VENDOR}/cdc_views/src/TimeInputView.cpp
     ${VENDOR}/cdc_views/src/ToastView.cpp
+    ${VENDOR}/cdc_views/src/QrRaster.cpp
+    ${VENDOR}/cdc_views/src/MonoSurface.cpp
     # Image pipeline used by ImageView / host_fs image viewing
     ${VENDOR}/cdc_image/src/Dither.cpp
     ${VENDOR}/cdc_image/src/ImageDecoder.cpp
     ${VENDOR}/cdc_image/src/ImageFormat.cpp
+    ${VENDOR}/cdc_image/src/JpegEncoder.cpp
+    # vCard store backing host_vcard_* (NVS-shimmed)
+    ${VENDOR}/mod_vcard/src/vcard_store.cpp
     # Vendored IJG libjpeg (decoder path of ImageDecoder)
     ${VENDOR}/libjpeg/jaricom.c ${VENDOR}/libjpeg/jcomapi.c
     ${VENDOR}/libjpeg/jdapimin.c ${VENDOR}/libjpeg/jdapistd.c
@@ -194,6 +230,16 @@ set(VENDOR_SOURCES
     ${VENDOR}/libjpeg/jidctint.c ${VENDOR}/libjpeg/jquant1.c
     ${VENDOR}/libjpeg/jquant2.c ${VENDOR}/libjpeg/jutils.c
     ${VENDOR}/libjpeg/jmemmgr.c ${VENDOR}/libjpeg/jmem_psram.c
+    # libjpeg compressor path (host_surface_export_jpg)
+    ${VENDOR}/libjpeg/jcapimin.c ${VENDOR}/libjpeg/jcapistd.c
+    ${VENDOR}/libjpeg/jcarith.c ${VENDOR}/libjpeg/jccoefct.c
+    ${VENDOR}/libjpeg/jccolor.c ${VENDOR}/libjpeg/jcdctmgr.c
+    ${VENDOR}/libjpeg/jchuff.c ${VENDOR}/libjpeg/jcinit.c
+    ${VENDOR}/libjpeg/jcmainct.c ${VENDOR}/libjpeg/jcmarker.c
+    ${VENDOR}/libjpeg/jcmaster.c ${VENDOR}/libjpeg/jcparam.c
+    ${VENDOR}/libjpeg/jcprepct.c ${VENDOR}/libjpeg/jcsample.c
+    ${VENDOR}/libjpeg/jctrans.c ${VENDOR}/libjpeg/jfdctflt.c
+    ${VENDOR}/libjpeg/jfdctfst.c ${VENDOR}/libjpeg/jfdctint.c
     # Plugin manager: manifest, capability checks, WASM module, host API
     ${PLUGIN_MANAGER}/src/Plugin.cpp
     ${PLUGIN_MANAGER}/src/PluginManifest.cpp
@@ -216,6 +262,8 @@ set(VENDOR_SOURCES
     ${PLUGIN_MANAGER}/src/host_api_lockscreen.cpp
     ${PLUGIN_MANAGER}/src/host_api_log.cpp
     ${PLUGIN_MANAGER}/src/host_api_msg.cpp
+    ${PLUGIN_MANAGER}/src/host_api_net.cpp
+    ${PLUGIN_MANAGER}/src/host_api_lifecycle.cpp
     ${PLUGIN_MANAGER}/src/host_api_nvs.cpp
     ${PLUGIN_MANAGER}/src/host_api_power.cpp
     ${PLUGIN_MANAGER}/src/host_api_se.cpp
@@ -226,6 +274,12 @@ set(VENDOR_SOURCES
     ${PLUGIN_MANAGER}/src/host_api_ui.cpp
     ${PLUGIN_MANAGER}/src/host_api_ui_views.cpp
     ${PLUGIN_MANAGER}/src/host_api_wifi.cpp
+    # Host API 0.8 additions (pure API families, no hardware)
+    ${PLUGIN_MANAGER}/src/host_api_qr.cpp
+    ${PLUGIN_MANAGER}/src/host_api_image.cpp
+    ${PLUGIN_MANAGER}/src/host_api_surface.cpp
+    ${PLUGIN_MANAGER}/src/host_api_vcard.cpp
+    ${PLUGIN_MANAGER}/src/host_api_ext_feature.cpp
 )
 
 # --------------------------------------------------------------------------
@@ -253,6 +307,7 @@ set(EMULATOR_SOURCES
     src/backends/VirtualClock.cpp
     src/frontends/Console.cpp
     src/frontends/PngFrontend.cpp
+    src/shim/CalepdPrintf.cpp
     src/shim/EspShim.cpp
     src/shim/FreeRtosShim.cpp
     src/shim/HostLog.cpp
@@ -276,6 +331,7 @@ target_include_directories(emulator_core PUBLIC
     ${VENDOR}/libjpeg
     ${VENDOR}/cdc_log/include
     ${VENDOR}/cdc_msg/include
+    ${VENDOR}/mod_vcard/include
     ${VENDOR}/cdc_os_ui/include
     ${VENDOR}/cdc_ui/include
     ${VENDOR}/cdc_views/include
@@ -283,6 +339,7 @@ target_include_directories(emulator_core PUBLIC
     ${PLUGIN_MANAGER}/src          # host_str_conv.h, HexUtil.h
     ${VENDOR}/../main              # tropic_slot_map.h (central slot map)
     ${stb_SOURCE_DIR}
+    ${lodepng_SOURCE_DIR}
     ${cjson_SOURCE_DIR}
     src
 )
@@ -300,10 +357,12 @@ endif()
 target_link_libraries(emulator_core PUBLIC
     wamr
     cjson
+    esp_qrcode
     mbedtls
     mbedcrypto
     mbedx509
     monocypher_ed25519
+    lodepng_static
 )
 
 find_package(Threads REQUIRED)
@@ -313,7 +372,7 @@ if(WIN32)
 endif()
 
 # Self-contained release binaries (FR-028/029): WAMR, mbedTLS, cJSON,
-# Monocypher and stb are always linked statically; this additionally links
+# Monocypher, LodePNG and stb are always linked statically; this additionally links
 # libstdc++/libgcc statically so the binary runs on older distros/macOS
 # without matching runtime packages.
 option(EMULATOR_STATIC_RUNTIME "Statically link the C++ runtime (release artifacts)" OFF)
@@ -333,13 +392,21 @@ if(EMULATOR_WINDOW)
     if(SDL2_FOUND)
         target_sources(emulator_core PRIVATE src/frontends/WindowFrontend.cpp)
         target_compile_definitions(emulator_core PUBLIC EMULATOR_WITH_SDL2)
-        if(TARGET SDL2::SDL2)
+        # On macOS prefer the static SDL2: a single self-contained binary
+        # sidesteps the ad-hoc-signed-dylib library-validation hang that a
+        # provenanced (CI-built) process hits when it dlopen()s a dylib whose
+        # signature differs from the executable's.
+        if(APPLE AND TARGET SDL2::SDL2-static)
+            target_link_libraries(emulator_core PUBLIC SDL2::SDL2-static)
+            message(STATUS "emulator: SDL2 window frontend enabled (static)")
+        elseif(TARGET SDL2::SDL2)
             target_link_libraries(emulator_core PUBLIC SDL2::SDL2)
+            message(STATUS "emulator: SDL2 window frontend enabled")
         else()
             target_include_directories(emulator_core PUBLIC ${SDL2_INCLUDE_DIRS})
             target_link_libraries(emulator_core PUBLIC ${SDL2_LIBRARIES})
+            message(STATUS "emulator: SDL2 window frontend enabled")
         endif()
-        message(STATUS "emulator: SDL2 window frontend enabled")
     else()
         message(STATUS "emulator: SDL2 not found - building headless-only")
     endif()
@@ -350,9 +417,19 @@ endif()
 if(NOT MSVC)
     set_source_files_properties(${VENDOR_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
     target_compile_options(emulator_core PRIVATE -Wall -Wextra)
-    # stb single-header implementations trip -Wextra; not our code.
-    set_source_files_properties(src/frontends/PngFrontend.cpp src/shim/PngShim.cpp
+    # stb single-header writer trips -Wextra; not our code.
+    set_source_files_properties(src/frontends/PngFrontend.cpp
         PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers")
+    # CalEPD prints banners and always-0 refresh STATS to stdout; Adafruit-GFX
+    # prints a "write(NN) Custom font" line per classic-font glyph. Reroute the
+    # vendored firmware's printf into the debug log so stdout stays
+    # machine-readable (must come after the blanket VENDOR_SOURCES property,
+    # which it replaces).
+    set_source_files_properties(
+        ${CALEPD}/epd.cpp ${CALEPD}/models/goodisplay/gdey029T94.cpp
+        ${GFX}/Adafruit_GFX.cpp
+        PROPERTIES COMPILE_OPTIONS
+        "-w;-include;${CMAKE_CURRENT_SOURCE_DIR}/src/shim/calepd_printf_redirect.h")
 endif()
 
 enable_testing()

@@ -210,6 +210,29 @@ int host_ble_consume_notification(uint16_t* value_handle_out, uint8_t* buf, size
     return HOST_ERR_NOT_SUPPORTED;
 }
 
+int host_ble_subscribe_char(uint32_t conn, uint16_t value_handle, uint32_t action_id)
+{
+    (void)conn;
+    (void)value_handle;
+    (void)action_id;
+    STUB_ONCE("host_ble_subscribe_char");
+    return HOST_ERR_NOT_SUPPORTED;
+}
+
+uint16_t host_ble_get_mtu(uint32_t conn)
+{
+    (void)conn;
+    STUB_ONCE("host_ble_get_mtu");
+    return 0;
+}
+
+int host_ble_on_write_complete(uint32_t action_id)
+{
+    (void)action_id;
+    STUB_ONCE("host_ble_on_write_complete");
+    return HOST_ERR_NOT_SUPPORTED;
+}
+
 int host_usb_cdc_write(const uint8_t* data, size_t len)
 {
     (void)data;

@@ -40,6 +40,9 @@ struct EmulatorOptions {
     bool        offline = false;
     int64_t     run_seconds = -1;  ///< advance the clock deterministically
     int64_t     run_ticks = -1;    ///< advance in 50 ms plugin ticks
+    int64_t     serve_seconds = -1;///< run in REAL time for this long (network servers)
+    bool        sim_light_sleep = false; ///< pulse a light-sleep cycle during serve
+    bool        sim_deep_sleep = false;  ///< reboot (unload+reload) during serve
 };
 
 class EmulatorCore {
@@ -79,6 +82,20 @@ public:
     /// Run the whole scripted session per options (keys/cmd/seconds/ticks).
     /// \return process exit code (0 = clean run).
     int runScripted();
+
+    /// Run in REAL (wall-clock) time for `seconds`, ticking every 50 ms so
+    /// network servers (host_net_* listeners) can accept real connections
+    /// while the process lives. Optionally pulses a simulated sleep cycle.
+    int serveWallclock(int64_t seconds);
+
+    /// Simulate a light-sleep cycle: log the sleep/wake pair and run one tick
+    /// plus a net pump afterwards. Sockets survive, matching light sleep on
+    /// the badge. IPowerManager pre-sleep/wake callbacks are NOT fired yet.
+    void simulateLightSleep();
+
+    /// Simulate deep sleep: full plugin teardown then reload (a reboot), so
+    /// autoload + set_resident bring a resident service back afterward.
+    void simulateDeepSleep();
 
     /// plugin_on_exit + plugin_deinit + unload. Idempotent.
     void shutdown();

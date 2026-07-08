@@ -176,6 +176,7 @@ def build_wasm(plugin_dir: Path, name: str) -> Path:
     # examples share one workspace target dir at the vendor repo root.
     candidates = [
         plugin_dir / "target" / WASM_TARGET / "release" / f"{name}.wasm",
+        plugin_dir / "target" / WASM_TARGET / "release" / f"{name.replace('-', '_')}.wasm",
         VENDOR_PLUGINS / "target" / WASM_TARGET / "release" / f"{name}.wasm",
     ]
     raw = next((c for c in candidates if c.exists()), None)

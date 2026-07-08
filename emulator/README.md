@@ -37,6 +37,9 @@ needed, and launches the emulator:
 | `--data <dir>` | base dir for NVS / vFAT sandbox / SE store |
 | `--offline` | HTTP/socket fail with the plugin-visible network error; WiFi still reports connected |
 | `--seconds <n>` / `--ticks <n>` | advance the virtual clock deterministically |
+| `--serve <n>` | run headless in wall-clock time for `n` seconds so real TCP listeners stay reachable |
+| `--sim-light-sleep` | simulate a light-sleep wake cycle after the scripted run; sockets stay open |
+| `--sim-deep-sleep` | simulate a deep-sleep reboot after the scripted run; unload hooks run, then the plugin reloads |
 
 Interactive window keys: `0`-`9`, `Y`/`Enter` = YES, `N`/`Esc`/`Backspace` =
 NO, arrow keys = the badge's navigation digits (Up=2, Left=4, Right=6,
@@ -88,8 +91,10 @@ console never fails silently.
   locked, and its registered lockscreen quick-action is selectable by digit;
   a foreground-only plugin goes through the full unload cycle and unlock
   reloads it from scratch - both residency paths are testable.
-- **Not emulated**: `autoload` and `prevent_sleep` (badge boot/power
-  semantics).
+- **Partially emulated**: `autoload` and `prevent_sleep` are not full badge
+  boot/power semantics. `--sim-deep-sleep` does exercise unload plus reload for
+  the current plugin, so autoload-style resident services can verify reboot
+  cleanup. `prevent_sleep` has no power-management effect off-device.
 - **Prerequisites** (`wifi_connected`, `time_synced`, `battery_min`, ...)
   run before `plugin_on_enter` exactly like the firmware; the host
   environment satisfies all of them, so use `--fail-prereq` to exercise a

@@ -1,6 +1,6 @@
 /**
  * \file FreeRtosShim.cpp
- * \brief Host backing for the freertos/* shim headers: std mutexes, a simple
+ * \brief Host backing for the FreeRTOS shim headers: std mutexes, a simple
  *        FIFO queue, and delays that advance the VirtualClock.
  */
 #include <chrono>

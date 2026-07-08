@@ -27,7 +27,11 @@ bool HostWifi::getIpAddress(char* ip, size_t len) const
     if (!ip || len == 0) {
         return false;
     }
-    std::strncpy(ip, "192.168.1.42", len - 1);
+    // The emulator's net listener binds INADDR_ANY on the host, so it is
+    // reachable on every host interface. Loopback is the one address that is
+    // always valid, so report that instead of a fake LAN IP - a plugin's
+    // displayed URL is then connectable on the developer machine.
+    std::strncpy(ip, "127.0.0.1", len - 1);
     ip[len - 1] = '\0';
     return true;
 }

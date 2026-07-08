@@ -33,6 +33,18 @@ public:
     /// after lifecycle callbacks, FR-033).
     void captureFrame();
 
+    /// Emulate the panel's refresh latency (interactive runs only): a flush
+    /// starts a busy window sized by the refresh mode; flushes arriving while
+    /// busy coalesce into one pending frame delivered when the window ends -
+    /// mirroring the firmware's async render task, where ticks keep running
+    /// but frames appear at most once per refresh. Scripted/snapshot runs
+    /// leave this off and keep the immediate, deterministic behaviour.
+    void setRealtimeRefresh(bool on) { realtime_ = on; }
+
+    /// Deliver a coalesced pending frame once the busy window elapsed.
+    /// Cheap no-op when realtime refresh is off or nothing is pending.
+    void pump();
+
     // IService
     bool init() override;
     bool start() override { return true; }
@@ -70,12 +82,27 @@ private:
     HostDisplay() = default;
 
     Gdey029T94& gdey();
+    void flushInternal(cdc::hal::RefreshMode mode);
+    /// Capture and feed the sink; when `invert` XOR the bytes first (the
+    /// realtime "flash" cue that stands in for the e-paper's visible refresh).
+    void emitFrame(bool invert);
+    /// Start a realtime busy window for `mode`: publish DISPLAY_REFRESH and
+    /// show the invert-flash cue for FAST/FULL, or capture normally otherwise.
+    void beginRefresh(cdc::hal::RefreshMode mode, int64_t now);
 
     EpdSpi*                 io_ = nullptr;
     Gdey029T94*             gdey_ = nullptr;
     FrameSink               sink_;
     uint16_t                backlight_ = 512;
     cdc::core::ServiceState state_ = cdc::core::ServiceState::UNINITIALIZED;
+
+    bool                  realtime_ = false;
+    int64_t               busyUntilMs_ = 0;
+    bool                  pending_ = false;
+    cdc::hal::RefreshMode pendingMode_ = cdc::hal::RefreshMode::PARTIAL;
+    /// True while a FAST/FULL window is open and its DISPLAY_REFRESH begin has
+    /// been published but the matching end has not (paired in pump()).
+    bool                  refreshBusyHeavy_ = false;
 };
 
 }  // namespace emu

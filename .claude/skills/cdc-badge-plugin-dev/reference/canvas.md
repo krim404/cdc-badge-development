@@ -8,6 +8,13 @@ fits. Source of truth: `vendor/cdc-badge-plugins/sdk/cdc-badge-plugin/src/canvas
 **Read the E-Paper discipline in `pitfalls.md` first**: 296×128, ~100-300 ms per
 partial refresh, ghosting. Redraw only when a shown value changes - never per tick.
 
+**View lifecycle is YOUR job**: pop every view you push once it is no longer
+needed (`ui::pop()` / `ui::pop_to_plugin()`); views left on the stack survive
+plugin exit and trap the user. For animations NEVER push a new canvas per frame
+- push ONE canvas in `plugin_on_enter` and reuse it for every frame. Per-frame
+updates go through canvas elements (below) or, second choice, `clear()` +
+redraw + `commit(false)` on the same view.
+
 ## Lifecycle of a canvas
 
 ```rust
@@ -61,6 +68,53 @@ canvas::vline(x, y, h);                         // vertical line
 ```
 
 All coordinates are `i16`, relative to the canvas body top-left.
+
+## Elements (animation without redrawing)
+
+Draw calls can be grouped into named **elements** that are moved, hidden or
+removed afterwards - the host replays the retained display list with the
+element's offset applied, so a frame update is two calls instead of a full
+redraw. This is the intended way to animate on the canvas.
+
+```rust
+canvas::elem_begin(elem_id: u32) -> Result<()>;  // start tagging draw calls (creates elem)
+canvas::elem_end();                              // stop tagging (back to static background)
+canvas::elem_set_offset(elem_id, ox: i16, oy: i16) -> Result<()>;  // absolute offset
+canvas::elem_move(elem_id, dx: i16, dy: i16) -> Result<()>;        // relative shift
+canvas::elem_show(elem_id, visible: bool) -> Result<()>;           // hide keeps it recorded
+canvas::elem_remove(elem_id) -> Result<()>;      // drop elem + its draws, space reclaimed
+```
+
+Contract:
+- Element ids are plugin-chosen, non-zero, own namespace (unrelated to widget ids).
+  Max 16 elements; `clear()` drops all elements with the display list.
+- Offsets are relative to the coordinates the draw calls were recorded with;
+  `(0, 0)` restores the recorded position. Offsets/show/remove take effect on the
+  next `commit`.
+- `elem_begin` on an existing id appends more draw calls to that element.
+  To change an element's content (e.g. a counter text), `elem_remove` +
+  `elem_begin` + redraw it - arena space is compacted, so this is cheap and safe
+  to repeat.
+- Display list capacity is shared with untagged draws: 96 commands, 2 KB text
+  arena, 8 KB bitmap arena per canvas.
+
+Animation pattern (from `examples/canvas_demo` page 6):
+
+```rust
+// once, when building the page:
+canvas::elem_begin(ELEM_BALL)?;
+canvas::draw_circle(x0, y0, 6, true);   // recorded base position
+canvas::elem_end();
+canvas::commit(true);
+
+// per animation step (throttled in plugin_on_tick, e.g. every 400 ms):
+canvas::elem_move(ELEM_BALL, dx, dy)?;  // or elem_set_offset for absolute
+canvas::commit(false);                  // partial refresh
+```
+
+Throttle steps yourself in `plugin_on_tick` (fires every ~50 ms - do NOT step
+every tick; ~2-3 steps/s is the panel's practical limit) and stop animating
+when the value/scene is static.
 
 ## Canvas widgets (host-driven input)
 

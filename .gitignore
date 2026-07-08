@@ -71,3 +71,9 @@ desktop.ini
 # re-include it here explicitly.
 !.claude/
 !.claude/**
+
+# --- Emulator runtime sandboxes and agent scratch ---
+# (after the .claude re-include: the lock file must stay ignored)
+.emu-data/
+.pi/
+.claude/scheduled_tasks.lock

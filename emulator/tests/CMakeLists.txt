@@ -60,4 +60,24 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_msg.py
                 $<TARGET_FILE:cdc-badge-emulator>)
     set_tests_properties(msg_roundtrip PROPERTIES SKIP_RETURN_CODE 77)
+
+    # Console `paste` must convert host-terminal UTF-8 to CP437 like the
+    # firmware serial reader does (umlauts land as single CP437 bytes).
+    add_test(NAME paste_encoding
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_paste.py
+                $<TARGET_FILE:cdc-badge-emulator>)
+    set_tests_properties(paste_encoding PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# host_net_* listener end-to-end: the webserver plugin serves index.html over
+# real TCP inside a user+net namespace. Skips (77) without unshare/userns,
+# curl, or a built dist/webserver.wasm. The shell script is Linux/macOS-only;
+# Windows coverage comes from compile-time checks in the emulator job.
+if(NOT WIN32)
+    add_test(NAME webserver_http
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/webserver_http.sh
+                $<TARGET_FILE:cdc-badge-emulator>
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../dist/webserver.wasm
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/cdc-badge-plugins/plugins/webserver/meta.json)
+    set_tests_properties(webserver_http PROPERTIES SKIP_RETURN_CODE 77)
 endif()
