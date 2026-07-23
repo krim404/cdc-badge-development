@@ -42,7 +42,7 @@ emulator:
 # on tags and only when the Harbor credentials are configured.
 push:
   stage: push
-  image: docker:27
+  image: docker:29
   script:
     - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" "$HARBOR_HOST"
     - docker buildx build
