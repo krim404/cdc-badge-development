@@ -25,7 +25,7 @@ jobs:
           # which has a path too long for a Windows checkout.
           submodules: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -60,7 +60,7 @@ jobs:
           components/Adafruit-GFX components/CalEPD
           components/wamr_runtime/wasm-micro-runtime
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
