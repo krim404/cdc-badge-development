@@ -56,7 +56,7 @@ jobs:
         run: python3 emulator/tests/run_examples.py
 
       - name: Upload the emulator binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: cdc-badge-emulator-linux-x86_64
           path: emulator/build/cdc-badge-emulator

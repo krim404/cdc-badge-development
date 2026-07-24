@@ -125,7 +125,7 @@ jobs:
           # arm64 refuses to exec an unsigned binary; ad-hoc is enough here.
           codesign --force -s - ${{ matrix.artifact }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -151,7 +151,7 @@ jobs:
     steps:
       # Deliberately NO checkout and NO toolchain setup: the artifact must run
       # on a stock OS (SC-009). --help exercises binary load + libc/runtime.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.artifact }}
 
@@ -170,7 +170,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
