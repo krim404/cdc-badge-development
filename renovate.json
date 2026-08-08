@@ -3,15 +3,16 @@
   "extends": [
     "config:recommended"
   ],
-  "platformAutomerge": true,
   "packageRules": [
     {
-      "description": "Only the image build gates these updates, so minor bumps stay manual",
+      "description": "This repository is mirrored to several forges. An unattended merge on one of them makes the others diverge, so updates are merged by hand and pushed to every mirror.",
       "matchUpdateTypes": [
+        "major",
+        "minor",
         "patch",
         "digest"
       ],
-      "automerge": true
+      "automerge": false
     }
   ]
 }
