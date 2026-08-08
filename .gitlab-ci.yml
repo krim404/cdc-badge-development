@@ -1,6 +1,6 @@
 include:
   - project: library/ci-templates
-    ref: v1.2
+    ref: main
     file: /docker-image.yml
 
 variables:
