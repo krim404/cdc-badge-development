@@ -96,8 +96,15 @@ def rust_env() -> dict:
     cargo can find its sibling rustc even when the ~/.cargo/bin shims are not set
     up (e.g. a Homebrew rustup). Works on every OS, no hardcoded paths."""
     env = os.environ.copy()
-    cargo_dir = str(Path(cargo()).parent)
-    env["PATH"] = cargo_dir + os.pathsep + env.get("PATH", "")
+    cargo_dir = Path(cargo()).parent
+    env["PATH"] = str(cargo_dir) + os.pathsep + env.get("PATH", "")
+    if sys.platform == "darwin":
+        # Same lookup the rustup proxy sets up: rust-lld and rust-objcopy load
+        # @rpath/libLLVM.dylib from the toolchain's top-level lib/.
+        fallback = env.get("DYLD_FALLBACK_LIBRARY_PATH") or os.pathsep.join(
+            [str(Path.home() / "lib"), "/usr/local/lib", "/usr/lib"])
+        env["DYLD_FALLBACK_LIBRARY_PATH"] = (
+            str(cargo_dir.parent / "lib") + os.pathsep + fallback)
     return env
 
 
